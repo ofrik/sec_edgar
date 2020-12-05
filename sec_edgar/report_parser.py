@@ -3,11 +3,11 @@ import requests
 import re
 from datetime import datetime
 import traceback
-from balance_sheet_parser import BalanceSheetParser
-from cash_flow_parser import CashFlowParser
-from general_parser import GeneralParser
-from income_statement_parser import IncomeStatementParser
-from parser import Parser
+from sec_edgar import Parser
+from sec_edgar import BalanceSheetParser
+from sec_edgar import CashFlowParser
+from sec_edgar import GeneralParser
+from sec_edgar import IncomeStatementParser
 
 
 class ReportParser(Parser):
@@ -19,13 +19,8 @@ class ReportParser(Parser):
         self.parsers.append(parser)
 
     def _get_html_content(self, content):
-        html_start = content.find("<HTML>")
-        if html_start == -1:
-            html_start = content.find("<html>")
-        html_end = content.find("</HTML>")
-        if html_end == -1:
-            html_end = content.find("</html>")
-        html_end += len("</html>")
+        html_start = re.search(r"<html.*>", content, re.IGNORECASE | re.MULTILINE).start()
+        html_end = re.search(r"</html>", content, re.IGNORECASE | re.MULTILINE).end()
         return content[html_start:html_end]
 
     def _get_xbrl_content(self, content):
@@ -40,15 +35,19 @@ class ReportParser(Parser):
 
     def parse(self, file_url, save=True):
         # TODO check if it's not exists already
+        # TODO the reports before the last quarter of 2003 are in different format
         response = requests.get(file_url)
         if response.status_code == 200:
             content = response.content.decode("utf8")
+            content_type = "html"
             if "<xbrl>" in content.lower():
-                content_type = "xbrl"
                 report_content = self._get_xbrl_content(content)
-            else:
-                content_type = "html"
+                report_content = self._get_html_content(report_content)
+            elif "<html" in content.lower():
                 report_content = self._get_html_content(content)
+            else:
+                content_type = "raw"
+                report_content = content
             report_date = datetime.strptime(
                 re.findall(r"CONFORMED PERIOD OF REPORT:[\s\t]+(\d+)", content)[0], "%Y%m%d")
             for parser in self.parsers:
@@ -66,9 +65,14 @@ class ReportParser(Parser):
 
 if __name__ == '__main__':
     parser = ReportParser()
-    parser.add_parser(GeneralParser())
+    # parser.add_parser(GeneralParser())
     parser.add_parser(IncomeStatementParser())
-    parser.add_parser(BalanceSheetParser())
-    parser.add_parser(CashFlowParser())
-    parser.parse("https://www.sec.gov/Archives/edgar/data/1000045/0001193125-08-025292.txt")
-    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/000032019320000010/0000320193-20-000010.txt")
+    # parser.add_parser(BalanceSheetParser())
+    # parser.add_parser(CashFlowParser())
+    parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000950112-94-001226.txt")  # IBM 1994
+    # parser.parse(
+    #     "https://www.sec.gov/Archives/edgar/data/51143/000100547701501962/0001005477-01-501962.txt")  # IBM 2001
+    # parser.parse(
+    #     "https://www.sec.gov/Archives/edgar/data/51143/000110465909026661/0001104659-09-026661.txt")  # IBM 2009
+    # parser.parse(
+    #     "https://www.sec.gov/Archives/edgar/data/51143/000155837020011799/0001558370-20-011799.txt")  # APPL 2020

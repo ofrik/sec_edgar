@@ -2,9 +2,14 @@ from datetime import datetime
 import pandas as pd
 import requests
 import os
-import json
 from tqdm import tqdm
 import json
+
+from sec_edgar import BalanceSheetParser
+from sec_edgar import CashFlowParser
+from sec_edgar import GeneralParser
+from sec_edgar import IncomeStatementParser
+from sec_edgar import ReportParser
 
 
 class SecEdgar(object):
@@ -37,14 +42,14 @@ class SecEdgar(object):
         url = f"https://www.sec.gov/Archives/edgar/full-index/{year}/QTR{quarter}/master.idx"
         response = requests.get(url)
         if response.status_code == 200:
-            output = self.get_reports_paths(response.content.decode("utf8"), year, quarter)
+            output = self.get_reports_paths(response.content.decode("utf8"))
             with open(output_path, "w") as f:
                 json.dump(output, f)
             return output
         else:
             raise Exception(f"Failed to get data from {url}")
 
-    def get_reports_paths(self, master_idx, year, quarter):
+    def get_reports_paths(self, master_idx):
         content_lines = master_idx.splitlines()
         data = []
         for line in content_lines:
@@ -54,9 +59,11 @@ class SecEdgar(object):
                 if line.endswith(".txt"):
                     data.append(line.split("|"))
         df = pd.DataFrame(data, columns=columns)
-        only_quarter = df[df["Form Type"] == "10-Q"]
-        only_quarter["Filename"] = only_quarter["Filename"].apply(lambda x: f"https://www.sec.gov/Archives/{x}")
-        output = pd.Series(only_quarter.Filename.values, index=only_quarter.CIK).to_dict()
+        annual_and_quarterly_forms = df[(df["Form Type"] == "10-Q") | (df["Form Type"] == "10-K")]
+        annual_and_quarterly_forms["Filename"] = annual_and_quarterly_forms["Filename"].apply(
+            lambda x: f"https://www.sec.gov/Archives/{x}")
+        output = annual_and_quarterly_forms[["CIK", "Form Type", "Filename"]].groupby(by=["CIK", "Form Type"])[
+            "Filename"].apply(list).to_dict()
         return output
 
     def get_reports(self, parser, from_year, from_quarter, to_year=datetime.today().year,
@@ -91,6 +98,12 @@ class SecEdgar(object):
 
 
 if __name__ == '__main__':
-    edgar_sec = SecEdgar(["AAPL", "IBM"])
+    edgar_sec = SecEdgar(["AAPL"])
     edgar_sec.get_quarter_index(2008, 1)
+    parser = ReportParser()
+    parser.add_parser(GeneralParser())
+    parser.add_parser(IncomeStatementParser())
+    parser.add_parser(BalanceSheetParser())
+    parser.add_parser(CashFlowParser())
+    edgar_sec.get_reports()
     pass

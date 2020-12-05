@@ -1,4 +1,4 @@
-from parser import Parser
+from sec_edgar import Parser
 
 
 class CashFlowParser(Parser):

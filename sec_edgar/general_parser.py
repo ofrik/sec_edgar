@@ -1,6 +1,6 @@
 import re
 from bs4 import BeautifulSoup
-from parser import Parser
+from sec_edgar import Parser
 
 
 class GeneralParser(Parser):
@@ -20,6 +20,6 @@ class GeneralParser(Parser):
         else:
             raise Exception("Failed to find number of shares")
 
-    def parse(self, xml_content, type):
-        num_of_shares = self.get_num_of_shares(xml_content, type)
+    def parse(self, content, type):
+        num_of_shares = self.get_num_of_shares(content, type)
         return {"num_of_shares": num_of_shares}
