@@ -168,11 +168,13 @@ class Parser(object):
         # df.drop(index=still_empty_rows, inplace=True)
         df = df[df[0] != '(Amounts may not add due to rounding.)']
         df = df[df[0] != '(The accompanying notes are an integral part of the  financial statements.)']
+        df = df[df[0] != '* Reclassified to reflect discontinued operations  presentation.']
         df.rename(columns={0: "name"}, inplace=True)
         df.replace("\x92", "", inplace=True, regex=True)
         df.replace("\x97", "", inplace=True, regex=True)
         df.replace("\xa0", " ", inplace=True, regex=True)
         df.replace('–', "", inplace=True)
+        df.replace('—', "", inplace=True)
         df.replace(" +", " ", regex=True, inplace=True)
         df.replace(r"\*", "", regex=True, inplace=True)
         df = df[df[1:].dropna(how="all", axis=1).columns.tolist()]
@@ -246,8 +248,6 @@ class Parser(object):
         df = self._combine_first_rows(df)
         df = self._combine_columns(df)
         df = self._combine_df_rows(df)
-        # if len(set(df["name"].tolist()).intersection(set(df[df.columns[1]].tolist()))) / df["name"].shape[0] > 0.5:
-        #     df.drop(columns=[1], inplace=True)
         df = df[1:]
         # period = self._find_periods(df)
         for col in df.columns[1:]:
