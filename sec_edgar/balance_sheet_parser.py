@@ -9,7 +9,3 @@ class BalanceSheetParser(Parser):
         table_html = str(balance_sheet_title.find_next("table"))
         df, period = self.parse_table(table_html)
         return df
-
-    def _parse_xbrl(self, soup):
-        cash_end_eq = self._get_xbrl_tag(soup, "us-gaap:CashAndCashEquivalentsAtCarryingValue")
-        pass
