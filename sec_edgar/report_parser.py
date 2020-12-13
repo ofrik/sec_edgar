@@ -80,8 +80,8 @@ if __name__ == '__main__':
     # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000950112-95-001268.txt")  # IBM 1995
     # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001005477-96-000435.txt")  # IBM 1996
     # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001005477-97-002469.txt")  # IBM 1997
-    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001005477-98-002456.txt")  # IBM 1998
-    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001005477-99-002266.txt")  # IBM 1999
+    parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001005477-98-002456.txt")  # IBM 1998
+    parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001005477-99-002266.txt")  # IBM 1999
     # parser.parse(
     #     "https://www.sec.gov/Archives/edgar/data/51143/000100547700003871/0001005477-00-003871.txt")  # IBM 2000
     # parser.parse(
@@ -122,5 +122,5 @@ if __name__ == '__main__':
     #     "https://www.sec.gov/Archives/edgar/data/51143/000110465918048404/0001104659-18-048404.txt")  # IBM 2018
     # parser.parse(
     #     "https://www.sec.gov/Archives/edgar/data/51143/000155837019006560/0001558370-19-006560.txt")  # IBM 2019
-    parser.parse(
-        "https://www.sec.gov/Archives/edgar/data/51143/000155837020008516/0001558370-20-008516.txt")  # IBM 2020
+    # parser.parse(
+    #     "https://www.sec.gov/Archives/edgar/data/51143/000155837020008516/0001558370-20-008516.txt")  # IBM 2020

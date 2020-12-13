@@ -16,7 +16,8 @@ class IncomeStatementParser(Parser):
             if start_index == -1 and re.search(r"(CONSOLIDATED STATEMENT (OF )?(EARNINGS|OPERATIONS))", line,
                                                re.MULTILINE) is not None:
                 start_index = i
-            if start_index != -1 and "=" in line:
+            if start_index != -1 and re.search(r"CONSOLIDATED STATEMENT (OF )?FINANCIAL POSITION", line,
+                                               re.MULTILINE) is not None:
                 end_index = i
                 break
         return start_index, end_index

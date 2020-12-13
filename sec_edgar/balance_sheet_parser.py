@@ -1,7 +1,22 @@
+import re
+
 from sec_edgar import Parser
 
 
 class BalanceSheetParser(Parser):
+
+    def _find_relevant_lines(self, clean_lines):
+        # TODO get also the continued table if one exists
+        start_index = -1
+        end_index = -1
+        for i, line in enumerate(clean_lines):
+            if start_index == -1 and re.search(r"(CONSOLIDATED STATEMENT (OF )?FINANCIAL POSITION)", line,
+                                               re.MULTILINE) is not None:
+                start_index = i
+            if start_index != -1 and "=" in line:
+                end_index = i
+                break
+        return start_index, end_index
 
     def _parse_html(self, soup):
         balance_sheet_title = soup.find_all(

@@ -84,6 +84,8 @@ class Parser(object):
 
         df.replace(r"-+", "", inplace=True, regex=True)
         df.replace(r"_+", "", inplace=True, regex=True)
+        df.replace(r"=+", "", inplace=True, regex=True)
+        df.replace(r"\*", "", inplace=True, regex=True)
         df = df.replace("", np.nan).dropna(axis=0, how="all")
         df.replace(np.nan, "", inplace=True)
         for col in df.columns[1:]:
@@ -106,14 +108,32 @@ class Parser(object):
                     num_columns = len(years)
                 continue
             if num_columns:
+                if re.search(r"- ?[0-9]+ ?-", line) is not None:
+                    continue
+                if re.search(r"ITEM \d+\.", line) is not None:
+                    continue
+                if re.search(r"CONSOLIDATED STATEMENT OF EARNINGS.*", line) is not None:
+                    continue
+                if re.search(r"\w{3,9} \d{1,2}$", line) is not None:
+                    continue
+                if re.search(r"^(\d{4} ?){1,}", line) is not None:
+                    continue
+                if line.isupper():
+                    continue
+                if line == "<PAGE>" or (line.startswith("(") and line.endswith(")")):
+                    continue
                 if line.endswith(":"):
                     splits = [line]
                 elif "DISCONTINUED OPERATIONS" in line:
                     splits = [f"{line}:"]
+                elif line.startswith("Average number of common") or line.endswith("(millions)"):
+                    splits = [f"{line}"]
                 else:
                     splits = line.rsplit(maxsplit=num_columns)
-                if "<S>" not in line:
+                if "<S>" not in line and splits:
                     rows.append(splits)
+                    if splits[0].lower() == 'Cash dividends per common share'.lower():
+                        break
         return rows, num_columns, periods, years
 
     def _combine_rows(self, num_columns, rows):
@@ -125,7 +145,13 @@ class Parser(object):
                 continue
             found_item = re.search(r"[a-zA-Z]+", row[-1])
             if len(row) == num_columns + 1 or (found_item and not row[0].endswith(":")) or row[
-                0].lower().endswith("and"):
+                0].lower().endswith("and") or row[0].lower().endswith("common"):
+                if row[0].lower().endswith("common"):
+                    row_name = " ".join([rows[i][0], rows[i + 1][0]])
+                    new_row = [row_name]
+                    complete_rows.append(new_row)
+                    skip_next = True
+                    continue
                 if found_item:
                     new_row = " ".join(rows[i] + rows[i + 1]).rsplit(maxsplit=num_columns)
                     complete_rows.append(new_row)
