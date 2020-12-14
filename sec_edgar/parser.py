@@ -122,6 +122,8 @@ class Parser(object):
                     continue
                 if line == "<PAGE>" or (line.startswith("(") and line.endswith(")")):
                     continue
+                if line.lower().startswith("* reclassified"):
+                    continue
                 if line.endswith(":"):
                     splits = [line]
                 elif "DISCONTINUED OPERATIONS" in line:
