@@ -82,7 +82,7 @@ class Parser(object):
                           columns=["name"] + [f"period: {period}, {year}" for period in periods for year in
                                               sorted(set(years), reverse=True)])
 
-        df.replace(r"-+", "", inplace=True, regex=True)
+        df.replace(r"^-+", "", inplace=True, regex=True)
         df.replace(r"_+", "", inplace=True, regex=True)
         df.replace(r"=+", "", inplace=True, regex=True)
         df.replace(r"\*", "", inplace=True, regex=True)
@@ -92,19 +92,31 @@ class Parser(object):
             df[col] = df[col].apply(self._fix_values)
         return df
 
+    @abstractmethod
+    def _find_table_beginning(self, line):
+        raise NotImplementedError()
+
     def _lines_to_splitted_rows(self, table_rows):
+        # TODO better splitting, find pattern
         periods = None
-        num_columns = None
+        num_columns = 0
         rows = []
+        years = []
+        content_beginning = None
         for line in table_rows:
-            if re.search(r".*(\w+) months ended.*", line, re.IGNORECASE):
-                # collect period
-                found_items = re.findall(r"(\w+) ?\n?months ?\n?ended", line, re.IGNORECASE | re.MULTILINE)
-                periods = [w2n.word_to_num(period) for period in found_items]
-                continue
-            if periods and not num_columns:
-                years = re.findall(r"\d{4}", line)
-                if years:
+            if periods is None:
+                periods = self._find_table_beginning(line)
+                if periods is not None:
+                    continue
+            if not content_beginning:
+                separators = re.search(r"((-|_){2,}\s+(-|_){2,})", line)
+                if separators is not None:
+                    content_beginning = True
+                    continue
+            if periods and not content_beginning:
+                found_years = re.findall(r"\d{4}", line)
+                if found_years:
+                    years += found_years
                     num_columns = len(years)
                 continue
             if num_columns:
@@ -118,14 +130,20 @@ class Parser(object):
                     continue
                 if re.search(r"^(\d{4} ?){1,}", line) is not None:
                     continue
+                if re.search(r"shares authorized", line, re.IGNORECASE) is not None:
+                    continue
+                if "(Unaudited)" in line:
+                    continue
                 if line.isupper():
                     continue
                 if line == "<PAGE>" or (line.startswith("(") and line.endswith(")")):
                     continue
-                if line.lower().startswith("* reclassified"):
+                if line.lower().startswith("*"):
                     continue
                 if line.endswith(":"):
                     splits = [line]
+                elif line in ["realizable value", "Assets", "Liabilities and Stockholders' Equity"]:
+                    splits = [f"{line}:"]
                 elif "DISCONTINUED OPERATIONS" in line:
                     splits = [f"{line}:"]
                 elif line.startswith("Average number of common") or line.endswith("(millions)"):
@@ -146,12 +164,19 @@ class Parser(object):
                 skip_next = False
                 continue
             found_item = re.search(r"[a-zA-Z]+", row[-1])
+            if found_item is None:
+                found_item = row[-2] == "receivable" and row[-1] == "-"
             if len(row) == num_columns + 1 or (found_item and not row[0].endswith(":")) or row[
                 0].lower().endswith("and") or row[0].lower().endswith("common"):
                 if row[0].lower().endswith("common"):
                     row_name = " ".join([rows[i][0], rows[i + 1][0]])
                     new_row = [row_name]
                     complete_rows.append(new_row)
+                    skip_next = True
+                    continue
+                if i < len(rows) - 1 and rows[i + 1] == ['realizable value:']:
+                    new_row = " ".join(rows[i] + rows[i + 1])
+                    complete_rows.append([new_row])
                     skip_next = True
                     continue
                 if found_item:

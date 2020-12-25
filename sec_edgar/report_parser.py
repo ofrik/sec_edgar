@@ -72,24 +72,25 @@ class ReportParser(Parser):
 if __name__ == '__main__':
     parser = ReportParser()
     # parser.add_parser(GeneralParser())
-    parser.add_parser(IncomeStatementParser())
-    # parser.add_parser(BalanceSheetParser())
+    # parser.add_parser(IncomeStatementParser())
+    parser.add_parser(BalanceSheetParser())
     # parser.add_parser(CashFlowParser())
+    # TODO handle financial
 
-    parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000950112-94-001226.txt")  # IBM 1994
-    parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000950112-95-001268.txt")  # IBM 1995
-    parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001005477-96-000435.txt")  # IBM 1996
-    parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001005477-97-002469.txt")  # IBM 1997
-    parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001005477-98-002456.txt")  # IBM 1998
-    parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001005477-99-002266.txt")  # IBM 1999
-    parser.parse(
-        "https://www.sec.gov/Archives/edgar/data/51143/000100547700003871/0001005477-00-003871.txt")  # IBM 2000
-    parser.parse(
-        "https://www.sec.gov/Archives/edgar/data/51143/000100547701500586/0001005477-01-500586.txt")  # IBM 2001
-    parser.parse(
-        "https://www.sec.gov/Archives/edgar/data/51143/000091205702031609/0000912057-02-031609.txt")  # IBM 2002
-    parser.parse(
-        "https://www.sec.gov/Archives/edgar/data/51143/000104746903018510/0001047469-03-018510.txt")  # IBM 2003
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000950112-94-001226.txt")  # IBM 1994
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000950112-95-001268.txt")  # IBM 1995
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001005477-96-000435.txt")  # IBM 1996
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001005477-97-002469.txt")  # IBM 1997
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001005477-98-002456.txt")  # IBM 1998
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001005477-99-002266.txt")  # IBM 1999
+    # parser.parse(
+    #     "https://www.sec.gov/Archives/edgar/data/51143/000100547700003871/0001005477-00-003871.txt")  # IBM 2000
+    # parser.parse(
+    #     "https://www.sec.gov/Archives/edgar/data/51143/000100547701500586/0001005477-01-500586.txt")  # IBM 2001
+    # parser.parse(
+    #     "https://www.sec.gov/Archives/edgar/data/51143/000091205702031609/0000912057-02-031609.txt")  # IBM 2002
+    # parser.parse(
+    #     "https://www.sec.gov/Archives/edgar/data/51143/000104746903018510/0001047469-03-018510.txt")  # IBM 2003
     parser.parse(
         "https://www.sec.gov/Archives/edgar/data/51143/000110465904021678/0001104659-04-021678.txt")  # IBM 2004
     parser.parse(

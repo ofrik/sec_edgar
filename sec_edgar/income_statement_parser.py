@@ -9,7 +9,6 @@ from sec_edgar import Parser
 class IncomeStatementParser(Parser):
 
     def _find_relevant_lines(self, clean_lines):
-        # TODO get also the continued table if one exists
         start_index = -1
         end_index = -1
         for i, line in enumerate(clean_lines):
@@ -21,6 +20,13 @@ class IncomeStatementParser(Parser):
                 end_index = i
                 break
         return start_index, end_index
+
+    def _find_table_beginning(self, line):
+        if re.search(r".*(\w+) months ended.*", line, re.IGNORECASE):
+            # collect period
+            found_items = re.findall(r"(\w+) ?\n?months ?\n?ended", line, re.IGNORECASE | re.MULTILINE)
+            periods = [w2n.word_to_num(period) for period in found_items]
+            return periods
 
     def _combine_df_rows(self, df):
         df = self._combine_with_next_if_exists(df, "Income tax (expense)/benefit related to items of")
