@@ -35,16 +35,26 @@ class ReportParser(Parser):
 
     def parse(self, file_url, save=True):
         # TODO check if it's not exists already
-        # TODO the reports before the last quarter of 2003 are in different format
+        print(f"Parsing {file_url}")
         response = requests.get(file_url)
         if response.status_code == 200:
             content = response.content.decode("utf8")
             content_type = "html"
             if "<xbrl>" in content.lower():
-                found_xbrl = re.search(r"<xbrl>", content, re.IGNORECASE)
+                # found_xbrl = re.search(r"<xbrl>", content, re.IGNORECASE)
                 found_html = re.search(r"<html.*>", content, re.IGNORECASE)
-                if found_xbrl.start() < found_html.start():
-                    report_content = self._get_xbrl_content(content)
+                found_end_html = re.search(r"</html.*>", content, re.IGNORECASE)
+                report_10_q_start = None
+                report_10_q_end = None
+                for item in re.finditer(r"<DESCRIPTION>(.+)", content, re.IGNORECASE):
+                    if report_10_q_start is None and "10-Q" in content[item.start():item.end()]:
+                        report_10_q_start = item.end()
+                        continue
+                    if report_10_q_start is not None:
+                        report_10_q_end = item.start()
+                        break
+                if report_10_q_start < found_html.start() and found_end_html.end() < report_10_q_end:
+                    report_content = content[found_html.start():found_end_html.end()]
                 else:
                     report_content = content
                 report_content = self._get_html_content(report_content)
@@ -73,7 +83,7 @@ if __name__ == '__main__':
     parser = ReportParser()
     # parser.add_parser(GeneralParser())
     # parser.add_parser(IncomeStatementParser())
-    parser.add_parser(BalanceSheetParser())
+    # parser.add_parser(BalanceSheetParser())
     # parser.add_parser(CashFlowParser())
     # TODO handle financial
 

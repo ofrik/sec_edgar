@@ -17,7 +17,7 @@ class Parser(object):
     def _get_elements_between_tags(self, first_tag, second_tag, elements_tag):
         found_tags = []
         current_tag = first_tag
-        while current_tag.next:
+        while current_tag and current_tag.next:
             if current_tag == second_tag:
                 break
             if current_tag.name == elements_tag:
@@ -134,6 +134,8 @@ class Parser(object):
                     continue
                 if "(Unaudited)" in line:
                     continue
+                if "Months" in line:
+                    continue
                 if line.isupper():
                     continue
                 if line == "<PAGE>" or (line.startswith("(") and line.endswith(")")):
@@ -164,7 +166,7 @@ class Parser(object):
                 skip_next = False
                 continue
             found_item = re.search(r"[a-zA-Z]+", row[-1])
-            if found_item is None:
+            if found_item is None and len(row) > 1:
                 found_item = row[-2] == "receivable" and row[-1] == "-"
             if len(row) == num_columns + 1 or (found_item and not row[0].endswith(":")) or row[
                 0].lower().endswith("and") or row[0].lower().endswith("common"):
@@ -228,8 +230,11 @@ class Parser(object):
         df.replace("\xa0", " ", inplace=True, regex=True)
         df.replace('–', "", inplace=True)
         df.replace('—', "", inplace=True)
+        df.replace(r', ', ",", inplace=True, regex=True)
+        df.replace(r'\n', "", inplace=True, regex=True)
         df.replace(" +", " ", regex=True, inplace=True)
         df.replace(r"\*", "", regex=True, inplace=True)
+        df.replace(r"\(Unaudited\)", "", regex=True, inplace=True)
         df = df[df[1:].dropna(how="all", axis=1).columns.tolist()]
         columns_without_values = []
         for col in df.columns:
@@ -274,7 +279,7 @@ class Parser(object):
             if "name" in indexes_to_combine[col_name]:
                 new_column_name = "name"
             else:
-                new_column_name = col_name
+                new_column_name = re.sub(r", ", ",", col_name)
             df[new_column_name] = df[indexes_to_combine[col_name]].agg(self._selective_join, axis=1)
         df.drop(columns=first_row[1:].index.tolist(), inplace=True)
         return df
@@ -282,9 +287,9 @@ class Parser(object):
     def _combine_df_rows(self, df):
         return df
 
-    def _combine_with_next_if_exists(self, df, string):
+    def _combine_with_next_if_exists(self, df, string, regex=False):
         df.reset_index(drop=True, inplace=True)
-        df_ = df[df["name"] == string]
+        df_ = df[df["name"].str.contains(string, regex=regex)]
         if len(df_) > 0:
             index = df_.index[0]
             for col in df.columns:
@@ -301,6 +306,8 @@ class Parser(object):
         df = self._combine_first_rows(df)
         df = self._combine_columns(df)
         df = self._combine_df_rows(df)
+        df = df.drop(index=df[df["name"] == ""].index)
+        df.replace(r", ", ",", regex=True, inplace=True)
         df = df[1:]
         # period = self._find_periods(df)
         for col in df.columns[1:]:

@@ -29,9 +29,9 @@ class IncomeStatementParser(Parser):
             return periods
 
     def _combine_df_rows(self, df):
-        df = self._combine_with_next_if_exists(df, "Income tax (expense)/benefit related to items of")
-        df = self._combine_with_next_if_exists(df, "Intellectual property and custom")
-        df = self._combine_with_next_if_exists(df, "Income from continuing operations before")
+        df = self._combine_with_next_if_exists(df, "^Income tax (expense)/benefit related to items of$", regex=True)
+        df = self._combine_with_next_if_exists(df, "^Intellectual property and custom$", regex=True)
+        df = self._combine_with_next_if_exists(df, "^Income from continuing operations before$", regex=True)
         return df
 
     def _parse_html(self, soup):
@@ -47,6 +47,8 @@ class IncomeStatementParser(Parser):
                 lambda tag: self._find_multiple_words(tag, ["CONSOLIDATED", "BALANCE", "SHEET"],
                                                       words_not_to_include=["CONTINUED"], with_tag={"p", "b"}))
         tables = self._get_elements_between_tags(income_title, balance_sheet_title, "table")
+        if not tables:
+            raise Exception("Couldn't find the income sheet table(s)")
         dfs = []
         for table in tables:
             table_html = str(table)
