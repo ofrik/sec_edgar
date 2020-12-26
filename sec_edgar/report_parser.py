@@ -34,47 +34,55 @@ class ReportParser(Parser):
         return content[xbrl_start:xbrl_end]
 
     def parse(self, file_url, save=True):
-        # TODO check if it's not exists already
         print(f"Parsing {file_url}")
-        response = requests.get(file_url)
-        if response.status_code == 200:
-            content = response.content.decode("utf8")
-            content_type = "html"
-            if "<xbrl>" in content.lower():
-                # found_xbrl = re.search(r"<xbrl>", content, re.IGNORECASE)
-                found_html = re.search(r"<html.*>", content, re.IGNORECASE)
-                found_end_html = re.search(r"</html.*>", content, re.IGNORECASE)
-                report_10_q_start = None
-                report_10_q_end = None
-                for item in re.finditer(r"<DESCRIPTION>(.+)", content, re.IGNORECASE):
-                    if report_10_q_start is None and "10-Q" in content[item.start():item.end()]:
-                        report_10_q_start = item.end()
-                        continue
-                    if report_10_q_start is not None:
-                        report_10_q_end = item.start()
-                        break
-                if report_10_q_start < found_html.start() and found_end_html.end() < report_10_q_end:
-                    report_content = content[found_html.start():found_end_html.end()]
-                else:
-                    report_content = content
-                report_content = self._get_html_content(report_content)
-            elif "<html" in content.lower():
-                report_content = self._get_html_content(content)
-            else:
-                content_type = "raw"
-                report_content = content
-            report_date = datetime.strptime(
-                re.findall(r"CONFORMED PERIOD OF REPORT:[\s\t]+(\d+)", content)[0], "%Y%m%d")
-            for parser in self.parsers:
-                try:
-                    output = parser.parse(report_content, content_type)
-                    pass
-                except:
-                    print(f"Failed to parse {file_url} using {parser.__class__.__name__}")
-                    traceback.print_exc()
-            pass
+        local_path = os.path.join(self.base_folder, file_url.split('/')[-1])
+        if os.path.exists(local_path):
+            with open(local_path, "r", encoding="utf8") as f:
+                content = f.read()
         else:
-            raise Exception(f"Couldn't get {file_url}")
+            response = requests.get(file_url)
+            if response.status_code == 200:
+                content = response.content.decode("utf8")
+                if save:
+                    if os.path.exists(local_path):
+                        raise Exception("The file already exists")
+                    with open(local_path, "w", encoding="utf8") as f:
+                        f.write(content)
+            else:
+                raise Exception(f"Couldn't get {file_url}")
+        content_type = "html"
+        if "<xbrl>" in content.lower():
+            found_html = re.search(r"<html.*>", content, re.IGNORECASE)
+            found_end_html = re.search(r"</html.*>", content, re.IGNORECASE)
+            report_10_q_start = None
+            report_10_q_end = None
+            for item in re.finditer(r"<DESCRIPTION>(.+)", content, re.IGNORECASE):
+                if report_10_q_start is None and "10-Q" in content[item.start():item.end()]:
+                    report_10_q_start = item.end()
+                    continue
+                if report_10_q_start is not None:
+                    report_10_q_end = item.start()
+                    break
+            if report_10_q_start < found_html.start() and found_end_html.end() < report_10_q_end:
+                report_content = content[found_html.start():found_end_html.end()]
+            else:
+                report_content = content
+            report_content = self._get_html_content(report_content)
+        elif "<html" in content.lower():
+            report_content = self._get_html_content(content)
+        else:
+            content_type = "raw"
+            report_content = content
+        report_date = datetime.strptime(
+            re.findall(r"CONFORMED PERIOD OF REPORT:[\s\t]+(\d+)", content)[0], "%Y%m%d")
+        for parser in self.parsers:
+            try:
+                output = parser.parse(report_content, content_type)
+                pass
+            except:
+                print(f"Failed to parse {file_url} using {parser.__class__.__name__}")
+                traceback.print_exc()
+        pass
 
     pass
 
@@ -84,7 +92,7 @@ if __name__ == '__main__':
     # parser.add_parser(GeneralParser())
     # parser.add_parser(IncomeStatementParser())
     # parser.add_parser(BalanceSheetParser())
-    # parser.add_parser(CashFlowParser())
+    parser.add_parser(CashFlowParser())
     # TODO handle financial
 
     # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000950112-94-001226.txt")  # IBM 1994

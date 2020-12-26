@@ -97,7 +97,6 @@ class Parser(object):
         raise NotImplementedError()
 
     def _lines_to_splitted_rows(self, table_rows):
-        # TODO better splitting, find pattern
         periods = None
         num_columns = 0
         rows = []
@@ -148,7 +147,8 @@ class Parser(object):
                     splits = [f"{line}:"]
                 elif "DISCONTINUED OPERATIONS" in line:
                     splits = [f"{line}:"]
-                elif line.startswith("Average number of common") or line.endswith("(millions)"):
+                elif line.startswith("Average number of common") or line.endswith("(millions)") or line.startswith(
+                        "Adjustments to reconcile"):
                     splits = [f"{line}"]
                 else:
                     splits = line.rsplit(maxsplit=num_columns)
@@ -160,10 +160,10 @@ class Parser(object):
 
     def _combine_rows(self, num_columns, rows):
         complete_rows = []
-        skip_next = False
+        skip_next = 0
         for i, row in enumerate(rows):
             if skip_next:
-                skip_next = False
+                skip_next -= 1
                 continue
             found_item = re.search(r"[a-zA-Z]+", row[-1])
             if found_item is None and len(row) > 1:
@@ -174,26 +174,36 @@ class Parser(object):
                     row_name = " ".join([rows[i][0], rows[i + 1][0]])
                     new_row = [row_name]
                     complete_rows.append(new_row)
-                    skip_next = True
+                    skip_next = 1
                     continue
-                if i < len(rows) - 1 and rows[i + 1] == ['realizable value:']:
+                if i < len(rows) - 1 and rows[i + 1][-1].endswith(":"):
                     new_row = " ".join(rows[i] + rows[i + 1])
                     complete_rows.append([new_row])
-                    skip_next = True
+                    skip_next = 1
+                    continue
+                if i < len(rows) - 1 and found_item and re.search(r"[a-zA-Z]+", rows[i + 1][-1]) is not None:
+                    j = i + 1
+                    combined_rows = rows[i] + rows[i + 1]
+                    while j < len(rows) - 1 and re.search(r"[a-zA-Z]+", rows[j + 1][-1]) is not None:
+                        combined_rows += rows[j + 1]
+                        j += 1
+                    new_row = " ".join(combined_rows)
+                    complete_rows.append([new_row])
+                    skip_next = j - i
                     continue
                 if found_item:
                     new_row = " ".join(rows[i] + rows[i + 1]).rsplit(maxsplit=num_columns)
                     complete_rows.append(new_row)
-                    skip_next = True
+                    skip_next = 1
                     continue
                 if row[0].lower().endswith("and"):
                     row_name = " ".join([rows[i][0], rows[i + 1][0]])
                     new_row = " ".join([row_name] + rows[i][1:]).rsplit(maxsplit=num_columns)
                     complete_rows.append(new_row)
-                    skip_next = True
+                    skip_next = 1
                     continue
             complete_rows.append(row)
-            skip_next = False
+            skip_next = 0
         return complete_rows
 
     @abstractmethod
@@ -299,6 +309,7 @@ class Parser(object):
         return df
 
     def parse_table(self, table_html):
+        # TODO fix the period
         df = pd.read_html(table_html)
         if isinstance(df, list):
             df = df[0]
