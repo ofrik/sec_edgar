@@ -1,18 +1,29 @@
 from abc import abstractmethod
+import re
+import html
+
 import pandas as pd
 import numpy as np
 from bs4 import BeautifulSoup
 from word2number import w2n
-import re
+import dateutil.parser as dparser
 
 
 class Parser(object):
-    def parse(self, content, type):
+    def parse(self, content, type, do_html_native=False):
         if type == "html":
             soup = BeautifulSoup(content, "lxml")
-            return self._parse_html(soup)
+            tables = self._find_tables(soup)
+            try:
+                if do_html_native:
+                    return self._parse_html_native(tables), "native"
+                else:
+                    return self._parse_html(tables), "pandas"
+            except Exception as e:
+                print("Failed to parse html")
+                return self._parse_html_native(tables), "native"
         else:
-            return self._parse_raw(content)
+            return self._parse_raw(content), "raw"
 
     def _get_elements_between_tags(self, first_tag, second_tag, elements_tag):
         found_tags = []
@@ -24,6 +35,10 @@ class Parser(object):
                 found_tags.append(current_tag)
             current_tag = current_tag.next
         return found_tags
+
+    @abstractmethod
+    def _find_tables(self, soup):
+        raise NotImplementedError()
 
     @abstractmethod
     def _find_relevant_lines(self, lines):
@@ -71,11 +86,14 @@ class Parser(object):
             clean_lines.append(line)
         return clean_lines
 
-    def _parse_raw(self, content):
-        lines = content.replace("$", "").replace(",", "").split("\n")
-        clean_lines = [re.sub(r" +", " ", line).strip() for line in lines if line]
-        start_index, end_index = self._find_relevant_lines(clean_lines)
-        table_rows = self._clean_multipage_table(clean_lines[start_index:end_index])
+    def _parse_raw(self, content, preprocess_table=True):
+        if preprocess_table:
+            lines = content.replace("$", "").replace(",", "").split("\n")
+            clean_lines = [re.sub(r" +", " ", line).strip() for line in lines if line]
+            start_index, end_index = self._find_relevant_lines(clean_lines)
+            table_rows = self._clean_multipage_table(clean_lines[start_index:end_index])
+        else:
+            table_rows = content
         rows, num_columns, periods, years = self._lines_to_splitted_rows(table_rows)
         complete_rows = self._combine_rows(num_columns, rows)
         df = pd.DataFrame(complete_rows,
@@ -84,6 +102,7 @@ class Parser(object):
 
         df.replace(r"^-+", "", inplace=True, regex=True)
         df.replace(r"_+", "", inplace=True, regex=True)
+        df.replace(r"+", "", inplace=True, regex=True)
         df.replace(r"=+", "", inplace=True, regex=True)
         df.replace(r"\*", "", inplace=True, regex=True)
         df = df.replace("", np.nan).dropna(axis=0, how="all")
@@ -101,24 +120,36 @@ class Parser(object):
         num_columns = 0
         rows = []
         years = []
+        dates = []
         content_beginning = None
         for line in table_rows:
+            if not dates:
+                found_dates = re.findall(
+                    r"((?:January|February|March|April|May|June|July|August|September|October|November|December) [0-9]{1,2})",
+                    line, re.IGNORECASE)
+                if found_dates:
+                    dates = found_dates
             if periods is None:
                 periods = self._find_table_beginning(line)
-                if periods is not None:
-                    continue
-            if not content_beginning:
-                separators = re.search(r"((-|_){2,}\s+(-|_){2,})", line)
-                if separators is not None:
+                # if periods is not None:
+                #     continue
+            if (periods or dates) and not content_beginning:
+                separators = None  # re.search(r"((-|_){2,}\s+(-|_){2,})", line)
+                if separators is not None or "<S>" in line or ":" in line or (
+                        not line and dates and periods and years):
                     content_beginning = True
-                    continue
-            if periods and not content_beginning:
+                    if ":" not in line and years:
+                        continue
+            if (periods or dates) and not content_beginning:
                 found_years = re.findall(r"\d{4}", line)
                 if found_years:
                     years += found_years
                     num_columns = len(years)
+                if dates and periods and years:
+                    content_beginning = True
                 continue
             if num_columns:
+                line = re.sub(r"(-|\.){3,}", "", line.replace("_", "").replace("=", "")).strip()
                 if re.search(r"- ?[0-9]+ ?-", line) is not None:
                     continue
                 if re.search(r"ITEM \d+\.", line) is not None:
@@ -129,8 +160,10 @@ class Parser(object):
                     continue
                 if re.search(r"^(\d{4} ?){1,}", line) is not None:
                     continue
-                if re.search(r"shares authorized", line, re.IGNORECASE) is not None:
-                    continue
+                # if "\t" in line:
+                #     continue
+                # if re.search(r"shares authorized", line, re.IGNORECASE) is not None:
+                #     continue
                 if "(Unaudited)" in line:
                     continue
                 if "Months" in line:
@@ -141,69 +174,70 @@ class Parser(object):
                     continue
                 if line.lower().startswith("*"):
                     continue
-                if line.endswith(":"):
-                    splits = [line]
-                elif line in ["realizable value", "Assets", "Liabilities and Stockholders' Equity"]:
-                    splits = [f"{line}:"]
-                elif "DISCONTINUED OPERATIONS" in line:
-                    splits = [f"{line}:"]
-                elif line.startswith("Average number of common") or line.endswith("(millions)") or line.startswith(
-                        "Adjustments to reconcile"):
-                    splits = [f"{line}"]
-                else:
-                    splits = line.rsplit(maxsplit=num_columns)
+                try:
+                    if re.search("[0-9]?\.[0-9]*", line) is None and re.search(
+                            r".*\s+[0-9.\(\)\-_]+\s+[0-9.\(\)\-_$]+", line, re.IGNORECASE) is None:
+                        dparser.parse(line, fuzzy=True)
+                        splits = [line]
+                    else:
+                        raise
+                except:
+                    if line.endswith(":"):
+                        splits = [line]
+                    elif "(" in line and ")" not in line:
+                        splits = [line]
+                    elif line in ["realizable value", "Assets", "Liabilities and Stockholders' Equity"]:
+                        splits = [f"{line}:"]
+                    elif "DISCONTINUED OPERATIONS" in line:
+                        splits = [f"{line}:"]
+                    elif line.startswith("Average number of common") or line.endswith("(millions)") or line.startswith(
+                            "Adjustments to reconcile"):
+                        splits = [f"{line}"]
+                    else:
+                        if re.search(r".+\s+[0-9.\(\)\-_]+\s+[0-9.\(\)\-_$]+", line, re.IGNORECASE):
+                            splits = line.rsplit(maxsplit=num_columns)
+                        elif re.search(r"[a-zA-Z]+", line) is not None:
+                            splits = [line]
+                        else:
+                            continue
                 if "<S>" not in line and splits:
                     rows.append(splits)
                     if splits[0].lower() == 'Cash dividends per common share'.lower():
                         break
+        if not periods:
+            periods = [3]
+        if dates:
+            if len(dates) == len(years):
+                years = [f"{d} {year}" for d, year in zip(dates, years)]
+            else:
+                years = [f"{dates[0]} {year}" for year in years]
         return rows, num_columns, periods, years
 
     def _combine_rows(self, num_columns, rows):
         complete_rows = []
-        skip_next = 0
-        for i, row in enumerate(rows):
-            if skip_next:
-                skip_next -= 1
-                continue
-            found_item = re.search(r"[a-zA-Z]+", row[-1])
-            if found_item is None and len(row) > 1:
-                found_item = row[-2] == "receivable" and row[-1] == "-"
-            if len(row) == num_columns + 1 or (found_item and not row[0].endswith(":")) or row[
-                0].lower().endswith("and") or row[0].lower().endswith("common"):
-                if row[0].lower().endswith("common"):
-                    row_name = " ".join([rows[i][0], rows[i + 1][0]])
-                    new_row = [row_name]
-                    complete_rows.append(new_row)
-                    skip_next = 1
-                    continue
-                if i < len(rows) - 1 and rows[i + 1][-1].endswith(":"):
-                    new_row = " ".join(rows[i] + rows[i + 1])
-                    complete_rows.append([new_row])
-                    skip_next = 1
-                    continue
-                if i < len(rows) - 1 and found_item and re.search(r"[a-zA-Z]+", rows[i + 1][-1]) is not None:
-                    j = i + 1
-                    combined_rows = rows[i] + rows[i + 1]
-                    while j < len(rows) - 1 and re.search(r"[a-zA-Z]+", rows[j + 1][-1]) is not None:
-                        combined_rows += rows[j + 1]
-                        j += 1
-                    new_row = " ".join(combined_rows)
-                    complete_rows.append([new_row])
-                    skip_next = j - i
-                    continue
-                if found_item:
-                    new_row = " ".join(rows[i] + rows[i + 1]).rsplit(maxsplit=num_columns)
-                    complete_rows.append(new_row)
-                    skip_next = 1
-                    continue
-                if row[0].lower().endswith("and"):
-                    row_name = " ".join([rows[i][0], rows[i + 1][0]])
-                    new_row = " ".join([row_name] + rows[i][1:]).rsplit(maxsplit=num_columns)
-                    complete_rows.append(new_row)
-                    skip_next = 1
-                    continue
-            complete_rows.append(row)
-            skip_next = 0
+        i = 0
+        while i < len(rows):
+            row = rows[i]
+            combined_rows = row
+            if not combined_rows[-1].endswith(":"):
+                while len(row) == 1 and i < len(rows) - 1:
+                    i += 1
+                    row = rows[i]
+                    combined_rows += row
+                    if row[-1].endswith(":"):
+                        combined_rows = [" ".join(combined_rows)]
+                        break
+            if not combined_rows[-1].endswith(":") and re.search(r"[a-zA-Z]+", combined_rows[-1]):
+                i += 1
+                row = rows[i]
+                combined_rows += row
+            if len(combined_rows) > num_columns + 1:
+                combined_rows = " ".join(combined_rows).rsplit(" ", maxsplit=num_columns)
+            if combined_rows[0].endswith("and"):
+                combined_rows[0] += f" {rows[i + 1][0]}"
+                i += 1
+            i += 1
+            complete_rows.append(combined_rows)
         return complete_rows
 
     @abstractmethod
@@ -213,6 +247,26 @@ class Parser(object):
     @abstractmethod
     def _parse_html(self, soup):
         raise NotImplementedError()
+
+    @abstractmethod
+    def _parse_html_native(self, tables):
+        if not isinstance(tables, list):
+            tables = [tables]
+        dfs = []
+        for table in tables:
+            lines = []
+            rows = table.find_all("tr")
+            for row in rows:
+                line = re.sub(r' +', ' ',
+                              row.text.replace("\n", " ").replace(" )", ")").replace("( ", "(").replace("$",
+                                                                                                        "").replace(
+                                  ",", "")).strip()
+                if line:
+                    lines.append(line)
+            df = self._parse_raw(lines, preprocess_table=False)
+            dfs.append(df)
+        return pd.concat(dfs)
+        pass
 
     def _fix_values(self, x):
         if not x:
@@ -227,14 +281,10 @@ class Parser(object):
         df.replace("\u200b", np.nan, inplace=True)
         df.dropna(how="all", inplace=True, axis=0)
         df.dropna(how="all", inplace=True, axis=1)
-        # still_empty_columns = df.columns[(df.nunique() == 1).values].tolist()
-        # df.drop(columns=still_empty_columns, inplace=True)
-        # still_empty_rows = df.index[(df.nunique(axis=1) == 1).values].tolist()
-        # df.drop(index=still_empty_rows, inplace=True)
-        df = df[df[0] != '(Amounts may not add due to rounding.)']
-        df = df[df[0] != '(The accompanying notes are an integral part of the  financial statements.)']
-        df = df[df[0] != '* Reclassified to reflect discontinued operations  presentation.']
-        df.rename(columns={0: "name"}, inplace=True)
+        df = df[df[df.columns[0]] != '(Amounts may not add due to rounding.)']
+        df = df[df[df.columns[0]] != '(The accompanying notes are an integral part of the  financial statements.)']
+        df = df[df[df.columns[0]] != '* Reclassified to reflect discontinued operations  presentation.']
+        df.rename(columns={df.columns[0]: "name"}, inplace=True)
         df.replace("\x92", "", inplace=True, regex=True)
         df.replace("\x97", "", inplace=True, regex=True)
         df.replace("\xa0", " ", inplace=True, regex=True)
@@ -313,6 +363,8 @@ class Parser(object):
         df = pd.read_html(table_html)
         if isinstance(df, list):
             df = df[0]
+        if df.columns.nlevels > 1:
+            raise Exception("Can't parse multilevel table that way")
         df = self._clean_the_table(df)
         df = self._combine_first_rows(df)
         df = self._combine_columns(df)

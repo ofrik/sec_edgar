@@ -11,18 +11,19 @@ class BalanceSheetParser(Parser):
         start_index = -1
         end_index = -1
         for i, line in enumerate(clean_lines):
-            if start_index == -1 and re.search(r"CONSOLIDATED STATEMENT (OF )?FINANCIAL POSITION", line,
+            if start_index == -1 and re.search(r"CONSOLIDATED (STATEMENT )?(OF )?(FINANCIAL POSITION|BALANCE SHEETS)",
+                                               line,
                                                re.MULTILINE) is not None:
                 start_index = i
-            if start_index != -1 and re.search(r"CONSOLIDATED STATEMENT (OF )?CASH FLOWS?", line,
-                                               re.MULTILINE) is not None:
+            if start_index != -1 and (re.search(r"(CONSOLIDATED STATEMENT (OF )?)?CASH( FLOWS?)?", line,
+                                                re.MULTILINE) is not None):
                 end_index = i
                 break
         return start_index, end_index
 
     def _find_table_beginning(self, line):
         found_reg = re.search(
-            r".*At (January|February|March|April|May|June|July|August|September|October|November|December) [0-9]{1,2}.*",
+            r".*(?:At )?((?:January|February|March|April|May|June|July|August|September|October|November|December) [0-9]{1,2}).*",
             line, re.IGNORECASE)
         if found_reg is not None:
             return [3]
@@ -34,7 +35,7 @@ class BalanceSheetParser(Parser):
         df = self._combine_with_next_if_exists(df, r"Short-term.*\(net.*(?<!\))$", regex=True)
         return df
 
-    def _parse_html(self, soup):
+    def _find_tables(self, soup):
         balance_sheet_title = soup.find(
             lambda tag: self._find_multiple_words(tag, ["CONSOLIDATED"],
                                                   ["FINANCIAL POSITION", "BALANCE SHEET"],
@@ -46,6 +47,9 @@ class BalanceSheetParser(Parser):
         tables = self._get_elements_between_tags(balance_sheet_title, cash_flow_sheet_title, "table")
         if not tables:
             raise Exception("Couldn't find the balance sheet table(s)")
+        return tables
+
+    def _parse_html(self, tables):
         dfs = []
         for table in tables:
             table_html = str(table)

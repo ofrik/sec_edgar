@@ -1,3 +1,5 @@
+import traceback
+
 from datetime import datetime
 import pandas as pd
 import requests
@@ -35,6 +37,9 @@ class SecEdgar(object):
         pass
 
     def get_quarter_index(self, year, quarter):
+        if year < 1994:
+            raise Exception("The earliest year accessible is 1994")
+        print(f"Getting {year}-{quarter}")
         output_path = os.path.join(self._output_folder, f"{year}_{quarter}.index.json")
         if os.path.exists(output_path):
             with open(output_path, "r") as f:
@@ -64,10 +69,11 @@ class SecEdgar(object):
             lambda x: f"https://www.sec.gov/Archives/{x}")
         output = annual_and_quarterly_forms[["CIK", "Form Type", "Filename"]].groupby(by=["CIK", "Form Type"])[
             "Filename"].apply(list).to_dict()
+        output = {"_".join(k): v for k, v in output.items()}
         return output
 
     def get_reports(self, parser, from_year, from_quarter, to_year=datetime.today().year,
-                    to_quarter=pd.Timestamp(datetime.today()).quarter - 1):
+                    to_quarter=pd.Timestamp(datetime.today()).quarter - 1, report_type="10-Q"):
         max_year = datetime.today().year
         max_quarter = pd.Timestamp(datetime.today()).quarter - 1
         if to_year > max_year:
@@ -80,16 +86,20 @@ class SecEdgar(object):
         current_quarter = from_quarter
 
         while current_year < to_year or (current_year == to_year and current_quarter <= to_quarter):
-            print(f"Getting {current_year}-{current_quarter}")
-
             quarter_index = self.get_quarter_index(current_year, current_quarter)
-            cik_files = quarter_index[f"{current_year}-{current_quarter}"]
             for symbol in tqdm(self._symbols, leave=False):
                 try:
-                    symbol_file = cik_files[self._ciks_map[symbol]]
-                    report = parser.parse(symbol_file, save=True)
+                    symbol_files = quarter_index.get(f"{self._ciks_map[symbol]}_{report_type}", None)
+                    if not symbol_files:
+                        print(f"Couldn't find a report for {symbol} in Q{current_quarter} {current_year}")
+                        continue
+                    if len(symbol_files) > 1:
+                        print("There are multiple files, check out the differences")
+                        raise Exception("There are multiple files, we don't know how to handle that in the meanwhile")
+                    report = parser.parse(symbol_files[0], save=True)
                 except:
-                    print(f"Failed to get {symbol}")
+                    print(f"Failed to get {symbol} in Q{current_quarter} {current_year}")
+                    traceback.print_exc()
 
             current_quarter += 1
             if current_quarter % 5 == 0:
@@ -99,11 +109,11 @@ class SecEdgar(object):
 
 if __name__ == '__main__':
     edgar_sec = SecEdgar(["AAPL"])
-    edgar_sec.get_quarter_index(2008, 1)
+    # edgar_sec.get_quarter_index(1994, 1)
     parser = ReportParser()
-    parser.add_parser(GeneralParser())
+    # parser.add_parser(GeneralParser())
     parser.add_parser(IncomeStatementParser())
     parser.add_parser(BalanceSheetParser())
     parser.add_parser(CashFlowParser())
-    edgar_sec.get_reports()
+    edgar_sec.get_reports(parser, from_year=1994, from_quarter=1, to_year=2003, to_quarter=4)
     pass
