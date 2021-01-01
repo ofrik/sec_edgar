@@ -23,9 +23,9 @@ class ReportParser(Parser):
     def add_parser(self, parser):
         self.parsers.append(parser)
 
-    def _get_html_content(self, content):
-        html_start = re.search(r"<html.*>", content, re.IGNORECASE | re.MULTILINE).start()
-        html_end = re.search(r"</html>", content, re.IGNORECASE | re.MULTILINE).end()
+    def _get_html_content(self, content, tag="html"):
+        html_start = re.search(rf"<{tag}.*>", content, re.IGNORECASE | re.MULTILINE).start()
+        html_end = re.search(rf"</{tag}>", content, re.IGNORECASE | re.MULTILINE).end()
         return content[html_start:html_end]
 
     def _get_xbrl_content(self, content):
@@ -59,8 +59,8 @@ class ReportParser(Parser):
     def _get_report_content(self, content):
         content_type = "html"
         if "<xbrl>" in content.lower():
-            found_html = re.search(r"<html.*>", content, re.IGNORECASE)
-            found_end_html = re.search(r"</html.*>", content, re.IGNORECASE)
+            # found_html = re.search(r"<html.*>", content, re.IGNORECASE)
+            # found_end_html = re.search(r"</html.*>", content, re.IGNORECASE)
             report_10_q_start = None
             report_10_q_end = None
             for item in re.finditer(r"<DESCRIPTION>(.+)", content, re.IGNORECASE):
@@ -78,11 +78,13 @@ class ReportParser(Parser):
                     if report_10_q_start is not None:
                         report_10_q_end = item.start()
                         break
-            if report_10_q_start < found_html.start() and found_end_html.end() < report_10_q_end:
-                report_content = content[found_html.start():found_end_html.end()]
+            if report_10_q_start and report_10_q_end:
+                body_start = re.search(r"<body.*>", content[report_10_q_start:report_10_q_end], re.IGNORECASE)
+                body_end = re.search(r"</body.*>", content[report_10_q_start:report_10_q_end], re.IGNORECASE)
+                report_content = content[report_10_q_start + body_start.start():report_10_q_start + body_end.end()]
             else:
                 report_content = content
-            report_content = self._get_html_content(report_content)
+            report_content = self._get_html_content(report_content, "body")
         elif "<html" in content.lower():
             report_content = self._get_html_content(content)
         else:
@@ -103,8 +105,8 @@ class ReportParser(Parser):
                 # TODO validate the first column in 'name' and all the rest have some date in it
                 if len(output) == 0:
                     raise Exception()
-                print(f"columns: {len(output.columns)}, rows: {len(output)}")
-                pass
+                if len(output.columns) not in [3, 5]:
+                    print(f"columns: {len(output.columns)}, rows: {len(output)}\n{output.columns.tolist()}")
             except:
                 print(f"Failed to parse {file_url} using {parser.__class__.__name__}")
                 traceback.print_exc()
@@ -119,7 +121,9 @@ if __name__ == '__main__':
     parser.add_parser(IncomeStatementParser())
     parser.add_parser(BalanceSheetParser())
     parser.add_parser(CashFlowParser())
-
+    parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001104659-04-013278.txt")  # strange columns
+    parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0001104659-04-013021.txt")  # strange columns
+    parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0001104659-04-022384.txt")  # strange columns
     # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-94-000002.txt")  # AAPL 1994
     # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-95-000003.txt")  # AAPL 1995
     # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-96-000002.txt")  # AAPL 1996
@@ -172,13 +176,12 @@ if __name__ == '__main__':
     # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001005477-00-007765.txt")
     # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000912057-02-031609.txt")
     # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000912057-02-040785.txt")
-    parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001104659-05-018203.txt")  # strange num of columns
-    parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-19-000076.txt")  # strange num of columns
-    parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-19-000066.txt")  # strange num of columns
-    parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-97-000011.txt")
-    parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0001193125-14-277160.txt")
-    parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000051143-14-000004.txt")
-
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000051143-14-000004.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001104659-05-018203.txt")  # strange num of columns
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-19-000076.txt")  # strange num of columns
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-19-000066.txt")  # strange num of columns
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-20-000052.txt")  # strange num of columns
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-20-000062.txt")  # strange num of columns
     # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001047469-03-018510.txt")
     # parser.parse(
     #     "https://www.sec.gov/Archives/edgar/data/51143/000100547700003871/0001005477-00-003871.txt")  # IBM 2000

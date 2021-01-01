@@ -40,12 +40,20 @@ class BalanceSheetParser(Parser):
             lambda tag: self._find_multiple_words(tag, ["CONSOLIDATED"],
                                                   ["FINANCIAL POSITION", "BALANCE SHEET"],
                                                   with_tag={"p", "b", "font", "div", "span"}))
-        cash_flow_sheet_title = soup.find(
-            lambda tag: self._find_multiple_words(tag, ["CONSOLIDATED", "STATEMENT", "CASH", "FLOWS"],
-                                                  words_not_to_include=["CONTINUED"],
+        title_limit = None
+        shareholders_equity_title = soup.find(
+            lambda tag: self._find_multiple_words(tag, ["CONSOLIDATED", "STATEMENT", "SHAREHOLDERS’", "EQUITY"],
                                                   with_tag={"p", "b", "font", "div", "span"}))
+        if shareholders_equity_title is None:
+            cash_flow_sheet_title = soup.find(
+                lambda tag: self._find_multiple_words(tag, ["CONSOLIDATED", "STATEMENT", "CASH", "FLOWS"],
+                                                      words_not_to_include=["CONTINUED"],
+                                                      with_tag={"p", "b", "font", "div", "span"}))
+            title_limit = cash_flow_sheet_title
+        else:
+            title_limit = shareholders_equity_title
 
-        tables, period, end_date = self._get_elements_between_tags(balance_sheet_title, cash_flow_sheet_title, "table")
+        tables, period, end_date = self._get_elements_between_tags(balance_sheet_title, title_limit, "table")
         if not tables:
             raise Exception("Couldn't find the balance sheet table(s)")
         return tables, period, end_date

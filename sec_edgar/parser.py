@@ -11,19 +11,24 @@ import dateutil.parser as dparser
 
 class Parser(object):
     def parse(self, content, type, do_html_native=False):
+        df = None
+        parse_type = None
         if type == "html":
             soup = BeautifulSoup(content, "lxml")
             tables, period, end_date = self._find_tables_and_info(soup)
             try:
                 if do_html_native:
-                    return self._parse_html_native(tables, period, end_date), "native"
+                    df, parse_type = self._parse_html_native(tables, period, end_date), "native"
                 else:
-                    return self._parse_html(tables, period, end_date), "pandas"
+                    df, parse_type = self._parse_html(tables, period, end_date), "pandas"
             except Exception as e:
                 print("Failed to parse html, try using native html parsing")
-                return self._parse_html_native(tables, period, end_date), "native"
+                df, parse_type = self._parse_html_native(tables, period, end_date), "native"
         else:
-            return self._parse_raw(content), "raw"
+            df, parse_type = self._parse_raw(content), "raw"
+        if df is not None:
+            self._drop_similar_columns(df)
+        return df, parse_type
 
     def _get_elements_between_tags(self, first_tag, second_tag, elements_tag, stop_after_found_tag=False):
         # TODO find values scale
@@ -315,17 +320,33 @@ class Parser(object):
         df.replace(r"\*", "", regex=True, inplace=True)
         df.replace(r"\(Unaudited\)", "", regex=True, inplace=True)
         df = df[df[1:].dropna(how="all", axis=1).columns.tolist()]
-        columns_without_values = []
-        for col in df.columns:
-            if col != "name" and df[col].nunique() / len(df[col]) < 0.33:
-                columns_without_values.append(col)
-        df.drop(columns=columns_without_values, inplace=True)
+        self._drop_columns_without_values(df)
         df.reset_index(drop=True, inplace=True)
         indexes_with_categories = [i for i, x in enumerate(df["name"].values) if not pd.isna(x) and x.endswith(":")]
         for col in df.columns[1:]:
             for i in indexes_with_categories:
                 df.at[i, col] = np.nan
         return df
+
+    def _drop_columns_without_values(self, df):
+        columns_without_values = []
+        for col in df.columns:
+            if col != "name" and df[col].nunique() / len(df[col]) < 0.33:
+                columns_without_values.append(col)
+        df.drop(columns=columns_without_values, inplace=True)
+
+    def _drop_similar_columns(self, df):
+        columns_to_remove = []
+        for i, col in enumerate(df.columns):
+            for other_col in df.columns[i + 1:]:
+                if df[col].equals(df[other_col]):
+                    if len(col) > len(other_col):
+                        columns_to_remove.append(other_col)
+                    else:
+                        columns_to_remove.append(col)
+        if columns_to_remove:
+            print(f"Removing duplicate columns: {columns_to_remove}")
+            df.drop(columns=columns_to_remove, inplace=True)
 
     def _combine_first_rows(self, df):
         df = df.replace(np.nan, "")
