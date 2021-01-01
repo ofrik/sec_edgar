@@ -56,6 +56,6 @@ class IncomeStatementParser(Parser):
         for table in tables:
             table_html = str(table)
             table_html = table_html.replace("Thre e", "Three")  # an issue with 2005
-            df, period = self.parse_table(table_html)
+            df = self.parse_table(table_html)
             dfs.append(df)
         return pd.concat(dfs)

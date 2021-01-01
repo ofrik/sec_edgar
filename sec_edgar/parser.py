@@ -28,7 +28,31 @@ class Parser(object):
             df, parse_type = self._parse_raw(content), "raw"
         if df is not None:
             self._drop_similar_columns(df)
+            df = self._normalize_column_name(df)
         return df, parse_type
+
+    def _normalize_column_name(self, df):
+        column_mapping = {}
+        for col in df.columns[1:]:
+            period = 3
+            date_ = None
+            year = None
+            found_periods = self._find_table_beginning(col)
+            if found_periods:
+                period = found_periods[0]
+            found_dates = re.findall(
+                r"((?:January|February|March|April|May|June|July|August|September|October|November|December)\s[0-9]{1,2})",
+                col, re.IGNORECASE)
+            if found_dates:
+                date_ = found_dates[0]
+            found_years = re.findall(r"\d{4}", col)
+            if found_years:
+                year = found_years[0]
+            column_name = f"period: {period}, {date_.lower()}, {year}"
+            column_mapping[col] = column_name
+        if column_mapping:
+            df.rename(columns=column_mapping, inplace=True)
+        return df
 
     def _get_elements_between_tags(self, first_tag, second_tag, elements_tag, stop_after_found_tag=False):
         # TODO find values scale
@@ -403,7 +427,7 @@ class Parser(object):
             df.reset_index(drop=True, inplace=True)
         return df
 
-    def parse_table(self, table_html):
+    def parse_table(self, table_html, period=None, end_date=None):
         # TODO fix the period
         df = pd.read_html(table_html)
         if isinstance(df, list):
@@ -420,7 +444,25 @@ class Parser(object):
         # period = self._find_periods(df)
         for col in df.columns[1:]:
             df[col] = df[col].apply(self._fix_values)
-        return df, 3
+        if end_date:
+            column_mapping = {}
+            for col in df.columns[1:]:
+                found_dates = re.findall(
+                    r"((?:January|February|March|April|May|June|July|August|September|October|November|December)\s[0-9]{1,2})",
+                    col, re.IGNORECASE)
+                if not found_dates:
+                    column_mapping[col] = f"{end_date[0]} {col}"
+            if column_mapping:
+                df.rename(columns=column_mapping, inplace=True)
+        if period:
+            column_mapping = {}
+            for col in df.columns[1:]:
+                found_period = self._find_table_beginning(col)
+                if not found_period:
+                    column_mapping[col] = f"period: {period[0]}, {col}"
+            if column_mapping:
+                df.rename(columns=column_mapping, inplace=True)
+        return df
 
 
 if __name__ == '__main__':

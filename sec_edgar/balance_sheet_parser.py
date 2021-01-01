@@ -62,6 +62,6 @@ class BalanceSheetParser(Parser):
         dfs = []
         for table in tables:
             table_html = str(table)
-            df, period = self.parse_table(table_html)
+            df = self.parse_table(table_html)
             dfs.append(df)
         return pd.concat(dfs)

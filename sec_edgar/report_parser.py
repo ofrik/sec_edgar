@@ -105,7 +105,7 @@ class ReportParser(Parser):
                 # TODO validate the first column in 'name' and all the rest have some date in it
                 if len(output) == 0:
                     raise Exception()
-                if len(output.columns) not in [3, 5]:
+                if len(output.columns) not in [3, 5] or True:
                     print(f"columns: {len(output.columns)}, rows: {len(output)}\n{output.columns.tolist()}")
             except:
                 print(f"Failed to parse {file_url} using {parser.__class__.__name__}")
@@ -118,9 +118,10 @@ class ReportParser(Parser):
 if __name__ == '__main__':
     parser = ReportParser()
     # parser.add_parser(GeneralParser())
-    parser.add_parser(IncomeStatementParser())
-    parser.add_parser(BalanceSheetParser())
+    # parser.add_parser(IncomeStatementParser())
+    # parser.add_parser(BalanceSheetParser())
     parser.add_parser(CashFlowParser())
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001104659-04-021678.txt")  # strange columns
     parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001104659-04-013278.txt")  # strange columns
     parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0001104659-04-013021.txt")  # strange columns
     parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0001104659-04-022384.txt")  # strange columns
