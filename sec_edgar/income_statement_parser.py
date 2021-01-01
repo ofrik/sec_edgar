@@ -35,24 +35,23 @@ class IncomeStatementParser(Parser):
         df = self._combine_with_next_if_exists(df, "^Income from continuing operations before$", regex=True)
         return df
 
-    def _find_tables(self, soup):
+    def _find_tables_and_info(self, soup):
         income_title = soup.find(
             lambda tag: self._find_multiple_words(tag, ["CONSOLIDATED", "STATEMENT"],
                                                   ["INCOME", "EARNINGS", "OPERATIONS"],
-                                                  ["COMPREHENSIVE", "CONTINUED"], with_tag={"p", "b"}))
+                                                  ["COMPREHENSIVE", "CONTINUED"],
+                                                  with_tag={"p", "b", "font", "span", "div"}))
         balance_sheet_title = soup.find(
-            lambda tag: self._find_multiple_words(tag, ["CONSOLIDATED", "STATEMENT", "FINANCIAL", "POSITION"],
-                                                  words_not_to_include=["CONTINUED"], with_tag={"p", "b"}))
-        if not balance_sheet_title:
-            balance_sheet_title = soup.find(
-                lambda tag: self._find_multiple_words(tag, ["CONSOLIDATED", "BALANCE", "SHEET"],
-                                                      words_not_to_include=["CONTINUED"], with_tag={"p", "b"}))
-        tables = self._get_elements_between_tags(income_title, balance_sheet_title, "table")
+            lambda tag: self._find_multiple_words(tag, ["CONSOLIDATED"],
+                                                  either=["FINANCIAL POSITION", "BALANCE SHEET"],
+                                                  words_not_to_include=["CONTINUED"],
+                                                  with_tag={"p", "b", "font", "span", "div"}))
+        tables, period, end_date = self._get_elements_between_tags(income_title, balance_sheet_title, "table")
         if not tables:
             raise Exception("Couldn't find the income sheet table(s)")
-        return tables
+        return tables, period, end_date
 
-    def _parse_html(self, tables):
+    def _parse_html(self, tables, period=None, end_date=None):
         dfs = []
         for table in tables:
             table_html = str(table)

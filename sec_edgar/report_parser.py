@@ -70,6 +70,14 @@ class ReportParser(Parser):
                 if report_10_q_start is not None:
                     report_10_q_end = item.start()
                     break
+            if not report_10_q_end and not report_10_q_start:
+                for item in re.finditer(r"<TYPE>(.+)", content, re.IGNORECASE):
+                    if report_10_q_start is None and "10-Q" in content[item.start():item.end()]:
+                        report_10_q_start = item.end()
+                        continue
+                    if report_10_q_start is not None:
+                        report_10_q_end = item.start()
+                        break
             if report_10_q_start < found_html.start() and found_end_html.end() < report_10_q_end:
                 report_content = content[found_html.start():found_end_html.end()]
             else:
@@ -92,8 +100,10 @@ class ReportParser(Parser):
         for parser in self.parsers:
             try:
                 output, parsing_type = parser.parse(report_content, content_type, parsing_type == "native")
+                # TODO validate the first column in 'name' and all the rest have some date in it
                 if len(output) == 0:
                     raise Exception()
+                print(f"columns: {len(output.columns)}, rows: {len(output)}")
                 pass
             except:
                 print(f"Failed to parse {file_url} using {parser.__class__.__name__}")
@@ -115,17 +125,61 @@ if __name__ == '__main__':
     # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-96-000002.txt")  # AAPL 1996
     # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-97-000002.txt")  # AAPL 1997
     # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-98-000006.txt")  # AAPL 1998
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-99-000002.txt")  # AAPL 1999
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-99-000004.txt")  # AAPL 1999
     # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000912057-00-033901.txt")  # AAPL 2000
     # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000912057-01-515409.txt")  # AAPL 2001
-    parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000912057-01-528148.txt")  # AAPL 2001
-    parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000912057-02-004945.txt")  # AAPL 2002
-    parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000912057-02-030796.txt")  # AAPL 2002
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000912057-01-528148.txt")  # AAPL 2001
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000912057-02-004945.txt")  # AAPL 2002
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000912057-02-030796.txt")  # AAPL 2002
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0001104659-04-022384.txt")  # AAPL 2004
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0001104659-05-020421.txt")  # AAPL 2005
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0001104659-05-035792.txt")  # AAPL 2005
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0001104659-06-084286.txt")  # AAPL 2006
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0001104659-07-037745.txt")  # AAPL 2007
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0001104659-07-059873.txt")  # AAPL 2007
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0001193125-11-010144.txt")  # AAPL 2011
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0001193125-11-192493.txt")  # AAPL 2011
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0001628280-17-000717.txt")  # AAPL 2017
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0001628280-17-004790.txt")  # AAPL 2017
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-17-000009.txt")  # AAPL 2017
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-19-000066.txt")  # AAPL 2019
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-19-000076.txt")  # AAPL 2019
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-20-000010.txt")  # AAPL 2020
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-20-000052.txt")  # AAPL 2020
     # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000950112-94-001226.txt")  # IBM 1994
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000950112-94-002130.txt")  # IBM 1994
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000950112-94-002881.txt")  # IBM 1994
     # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000950112-95-001268.txt")  # IBM 1995
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000950112-95-002045.txt")  # IBM 1995
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000950112-95-002932.txt")  # IBM 1995
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000950112-96-001476.txt")  # IBM 1996
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000950112-96-002735.txt")  # IBM 1996
     # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001005477-96-000435.txt")  # IBM 1996
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001005477-97-001362.txt")  # IBM 1997
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000912057-97-027788.txt")  # IBM 1997
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001005477-97-002469.txt")  # IBM 1997
     # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001005477-97-002469.txt")  # IBM 1997
     # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001005477-98-002456.txt")  # IBM 1998
     # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001005477-99-002266.txt")  # IBM 1999
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000912057-02-020756.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000912057-02-040785.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001047469-03-036586.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001104659-04-032411.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001104659-04-013278.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0001193125-12-023398.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000051143-13-000007.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001005477-00-007765.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000912057-02-031609.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000912057-02-040785.txt")
+    parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001104659-05-018203.txt")  # strange num of columns
+    parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-19-000076.txt")  # strange num of columns
+    parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-19-000066.txt")  # strange num of columns
+    parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-97-000011.txt")
+    parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0001193125-14-277160.txt")
+    parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0000051143-14-000004.txt")
+
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001047469-03-018510.txt")
     # parser.parse(
     #     "https://www.sec.gov/Archives/edgar/data/51143/000100547700003871/0001005477-00-003871.txt")  # IBM 2000
     # parser.parse(

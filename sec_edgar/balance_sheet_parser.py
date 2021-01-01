@@ -35,21 +35,22 @@ class BalanceSheetParser(Parser):
         df = self._combine_with_next_if_exists(df, r"Short-term.*\(net.*(?<!\))$", regex=True)
         return df
 
-    def _find_tables(self, soup):
+    def _find_tables_and_info(self, soup):
         balance_sheet_title = soup.find(
             lambda tag: self._find_multiple_words(tag, ["CONSOLIDATED"],
                                                   ["FINANCIAL POSITION", "BALANCE SHEET"],
-                                                  with_tag={"p", "b"}))
+                                                  with_tag={"p", "b", "font", "div", "span"}))
         cash_flow_sheet_title = soup.find(
             lambda tag: self._find_multiple_words(tag, ["CONSOLIDATED", "STATEMENT", "CASH", "FLOWS"],
-                                                  words_not_to_include=["CONTINUED"], with_tag={"p", "b"}))
+                                                  words_not_to_include=["CONTINUED"],
+                                                  with_tag={"p", "b", "font", "div", "span"}))
 
-        tables = self._get_elements_between_tags(balance_sheet_title, cash_flow_sheet_title, "table")
+        tables, period, end_date = self._get_elements_between_tags(balance_sheet_title, cash_flow_sheet_title, "table")
         if not tables:
             raise Exception("Couldn't find the balance sheet table(s)")
-        return tables
+        return tables, period, end_date
 
-    def _parse_html(self, tables):
+    def _parse_html(self, tables, period=None, end_date=None):
         dfs = []
         for table in tables:
             table_html = str(table)

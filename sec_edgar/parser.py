@@ -13,19 +13,22 @@ class Parser(object):
     def parse(self, content, type, do_html_native=False):
         if type == "html":
             soup = BeautifulSoup(content, "lxml")
-            tables = self._find_tables(soup)
+            tables, period, end_date = self._find_tables_and_info(soup)
             try:
                 if do_html_native:
-                    return self._parse_html_native(tables), "native"
+                    return self._parse_html_native(tables, period, end_date), "native"
                 else:
-                    return self._parse_html(tables), "pandas"
+                    return self._parse_html(tables, period, end_date), "pandas"
             except Exception as e:
-                print("Failed to parse html")
-                return self._parse_html_native(tables), "native"
+                print("Failed to parse html, try using native html parsing")
+                return self._parse_html_native(tables, period, end_date), "native"
         else:
             return self._parse_raw(content), "raw"
 
-    def _get_elements_between_tags(self, first_tag, second_tag, elements_tag):
+    def _get_elements_between_tags(self, first_tag, second_tag, elements_tag, stop_after_found_tag=False):
+        # TODO find values scale
+        period = None
+        end_date = None
         found_tags = []
         current_tag = first_tag
         while current_tag and current_tag.next:
@@ -33,11 +36,22 @@ class Parser(object):
                 break
             if current_tag.name == elements_tag:
                 found_tags.append(current_tag)
+                if stop_after_found_tag:
+                    break
+            if hasattr(current_tag, 'text') and not found_tags and current_tag.find("table") is None:
+                if not end_date:
+                    found_dates = re.findall(
+                        r"((?:January|February|March|April|May|June|July|August|September|October|November|December)\s[0-9]{1,2})",
+                        current_tag.text, re.IGNORECASE)
+                    if found_dates:
+                        end_date = [re.sub("\s+", " ", d) for d in found_dates]
+                if not period:
+                    period = self._find_table_beginning(current_tag.text)
             current_tag = current_tag.next
-        return found_tags
+        return found_tags, period, end_date
 
     @abstractmethod
-    def _find_tables(self, soup):
+    def _find_tables_and_info(self, soup):
         raise NotImplementedError()
 
     @abstractmethod
@@ -48,7 +62,8 @@ class Parser(object):
         text = tag.text.strip()
         if not text or tag.name in {"html", "body"}:
             return False
-        if with_tag and tag.name not in with_tag:
+        if ((with_tag and tag.name not in with_tag) or len(tag.contents) > 1) and re.search(
+                rf"^{' '.join(words)}(?: OF)? (?:{'|'.join(either)})", text) is None:
             return False
         matches = [re.search(rf".*{word}S?.*", text, re.MULTILINE) is not None for word in
                    words]
@@ -86,24 +101,25 @@ class Parser(object):
             clean_lines.append(line)
         return clean_lines
 
-    def _parse_raw(self, content, preprocess_table=True):
+    def _parse_raw(self, content, period=None, end_date=None, preprocess_table=True):
         if preprocess_table:
-            lines = content.replace("$", "").replace(",", "").split("\n")
-            clean_lines = [re.sub(r" +", " ", line).strip() for line in lines if line]
+            lines = content.replace("$", "").split("\n")
+            clean_lines = [re.sub(r"\s+", " ", line).strip() for line in lines if line]
             start_index, end_index = self._find_relevant_lines(clean_lines)
             table_rows = self._clean_multipage_table(clean_lines[start_index:end_index])
         else:
             table_rows = content
-        rows, num_columns, periods, years = self._lines_to_splitted_rows(table_rows)
+        rows, num_columns, periods, years = self._lines_to_splitted_rows(table_rows, period, end_date)
         complete_rows = self._combine_rows(num_columns, rows)
         df = pd.DataFrame(complete_rows,
                           columns=["name"] + [f"period: {period}, {year}" for period in periods for year in
-                                              sorted(set(years), reverse=True)])
+                                              sorted(set(years), key=lambda x: pd.to_datetime(x), reverse=True)])
 
         df.replace(r"^-+", "", inplace=True, regex=True)
         df.replace(r"_+", "", inplace=True, regex=True)
         df.replace(r"+", "", inplace=True, regex=True)
         df.replace(r"=+", "", inplace=True, regex=True)
+        df.replace(r"\++", "", inplace=True, regex=True)
         df.replace(r"\*", "", inplace=True, regex=True)
         df = df.replace("", np.nan).dropna(axis=0, how="all")
         df.replace(np.nan, "", inplace=True)
@@ -115,27 +131,54 @@ class Parser(object):
     def _find_table_beginning(self, line):
         raise NotImplementedError()
 
-    def _lines_to_splitted_rows(self, table_rows):
-        periods = None
+    def _should_skip_line(self, line):
+        if not line:
+            return True
+        if re.search(r"- ?[0-9]+ ?-", line) is not None:
+            return True
+        if re.search(r"ITEM \d+\.", line) is not None:
+            return True
+        if re.search(r"CONSOLIDATED STATEMENT OF EARNINGS.*", line) is not None:
+            return True
+        if re.search(r"\w{3,9} \d{1,2}$", line) is not None:
+            return True
+        if re.search(r"^(\d{4} ?){1,}", line) is not None:
+            return True
+        if "(Unaudited)" in line:
+            return True
+        if "Months" in line:
+            return True
+        if line.isupper() and ":" not in line:
+            return True
+        if line == "<PAGE>" or (line.startswith("(") and line.endswith(")")):
+            return True
+        if line.lower().startswith("*"):
+            return True
+        return False
+
+    def _lines_to_splitted_rows(self, table_rows, periods, end_date):
         num_columns = 0
         rows = []
         years = []
-        dates = []
+        dates = end_date
         content_beginning = None
         for line in table_rows:
-            if not dates:
+            if not content_beginning:
                 found_dates = re.findall(
-                    r"((?:January|February|March|April|May|June|July|August|September|October|November|December) [0-9]{1,2})",
+                    r"((?:January|February|March|April|May|June|July|August|September|October|November|December)\s[0-9]{1,2})",
                     line, re.IGNORECASE)
                 if found_dates:
-                    dates = found_dates
+                    if dates:
+                        dates += found_dates
+                    else:
+                        dates = found_dates
             if periods is None:
                 periods = self._find_table_beginning(line)
                 # if periods is not None:
                 #     continue
             if (periods or dates) and not content_beginning:
                 separators = None  # re.search(r"((-|_){2,}\s+(-|_){2,})", line)
-                if separators is not None or "<S>" in line or ":" in line or (
+                if separators is not None or "<S>" in line or (":" in line and years) or (
                         not line and dates and periods and years):
                     content_beginning = True
                     if ":" not in line and years:
@@ -145,34 +188,12 @@ class Parser(object):
                 if found_years:
                     years += found_years
                     num_columns = len(years)
-                if dates and periods and years:
+                if dates and periods and years and len(dates) == len(years):
                     content_beginning = True
                 continue
             if num_columns:
-                line = re.sub(r"(-|\.){3,}", "", line.replace("_", "").replace("=", "")).strip()
-                if re.search(r"- ?[0-9]+ ?-", line) is not None:
-                    continue
-                if re.search(r"ITEM \d+\.", line) is not None:
-                    continue
-                if re.search(r"CONSOLIDATED STATEMENT OF EARNINGS.*", line) is not None:
-                    continue
-                if re.search(r"\w{3,9} \d{1,2}$", line) is not None:
-                    continue
-                if re.search(r"^(\d{4} ?){1,}", line) is not None:
-                    continue
-                # if "\t" in line:
-                #     continue
-                # if re.search(r"shares authorized", line, re.IGNORECASE) is not None:
-                #     continue
-                if "(Unaudited)" in line:
-                    continue
-                if "Months" in line:
-                    continue
-                if line.isupper():
-                    continue
-                if line == "<PAGE>" or (line.startswith("(") and line.endswith(")")):
-                    continue
-                if line.lower().startswith("*"):
+                line = re.sub(r"(-|\.){3,}", "", line.replace("_", "").replace("=", "").replace(",", "")).strip()
+                if self._should_skip_line(line):
                     continue
                 try:
                     if re.search("[0-9]?\.[0-9]*", line) is None and re.search(
@@ -245,11 +266,11 @@ class Parser(object):
         raise NotImplementedError()
 
     @abstractmethod
-    def _parse_html(self, soup):
+    def _parse_html(self, soup, period=None, end_date=None):
         raise NotImplementedError()
 
     @abstractmethod
-    def _parse_html_native(self, tables):
+    def _parse_html_native(self, tables, period=None, end_date=None):
         if not isinstance(tables, list):
             tables = [tables]
         dfs = []
@@ -257,16 +278,14 @@ class Parser(object):
             lines = []
             rows = table.find_all("tr")
             for row in rows:
-                line = re.sub(r' +', ' ',
-                              row.text.replace("\n", " ").replace(" )", ")").replace("( ", "(").replace("$",
-                                                                                                        "").replace(
-                                  ",", "")).strip()
-                if line:
+                line = re.sub(r'\s+', ' ', row.text.replace("\n", " ").replace("$", "")).strip()
+                line = re.sub(r'\s\)', ')', line)
+                line = re.sub(r'\(\s', '(', line)
+                if line and re.search('visibility\s*:\s*hidden', row.attrs.get("style", ""), re.IGNORECASE) is None:
                     lines.append(line)
-            df = self._parse_raw(lines, preprocess_table=False)
+            df = self._parse_raw(lines, period, end_date, preprocess_table=False)
             dfs.append(df)
         return pd.concat(dfs)
-        pass
 
     def _fix_values(self, x):
         if not x:
@@ -301,6 +320,11 @@ class Parser(object):
             if col != "name" and df[col].nunique() / len(df[col]) < 0.33:
                 columns_without_values.append(col)
         df.drop(columns=columns_without_values, inplace=True)
+        df.reset_index(drop=True, inplace=True)
+        indexes_with_categories = [i for i, x in enumerate(df["name"].values) if not pd.isna(x) and x.endswith(":")]
+        for col in df.columns[1:]:
+            for i in indexes_with_categories:
+                df.at[i, col] = np.nan
         return df
 
     def _combine_first_rows(self, df):

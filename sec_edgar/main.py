@@ -42,13 +42,13 @@ class SecEdgar(object):
         print(f"Getting {year}-{quarter}")
         output_path = os.path.join(self._output_folder, f"{year}_{quarter}.index.json")
         if os.path.exists(output_path):
-            with open(output_path, "r") as f:
+            with open(output_path, "r", encoding="utf-8") as f:
                 return json.load(f)
         url = f"https://www.sec.gov/Archives/edgar/full-index/{year}/QTR{quarter}/master.idx"
         response = requests.get(url)
         if response.status_code == 200:
-            output = self.get_reports_paths(response.content.decode("utf8"))
-            with open(output_path, "w") as f:
+            output = self.get_reports_paths(response.content.decode("utf8", errors="ignore"))
+            with open(output_path, "w", encoding="utf-8") as f:
                 json.dump(output, f)
             return output
         else:
@@ -108,12 +108,12 @@ class SecEdgar(object):
 
 
 if __name__ == '__main__':
-    edgar_sec = SecEdgar(["AAPL"])
+    edgar_sec = SecEdgar(["AAPL", "IBM"])
     # edgar_sec.get_quarter_index(1994, 1)
     parser = ReportParser()
     # parser.add_parser(GeneralParser())
     parser.add_parser(IncomeStatementParser())
     parser.add_parser(BalanceSheetParser())
     parser.add_parser(CashFlowParser())
-    edgar_sec.get_reports(parser, from_year=1994, from_quarter=1, to_year=2003, to_quarter=4)
+    edgar_sec.get_reports(parser, from_year=1994, from_quarter=1)
     pass
