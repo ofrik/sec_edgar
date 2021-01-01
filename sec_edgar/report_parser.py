@@ -44,7 +44,7 @@ class ReportParser(Parser):
             with open(local_path, "r", encoding="utf8") as f:
                 content = f.read()
         else:
-            response = requests.get(file_url)
+            response = requests.get(file_url,headers={'accept-encoding':'gzip'})
             if response.status_code == 200:
                 content = response.content.decode("utf8")
                 if save:
