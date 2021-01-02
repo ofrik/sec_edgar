@@ -108,7 +108,8 @@ class SecEdgar(object):
 
 
 if __name__ == '__main__':
-    edgar_sec = SecEdgar(["AAPL", "IBM"])
+    edgar_sec = SecEdgar(["AAPL", "IBM", "LVS"])
+    edgar_sec = SecEdgar(["A"]) # CAT
     # edgar_sec.get_quarter_index(1994, 1)
     parser = ReportParser()
     # parser.add_parser(GeneralParser())

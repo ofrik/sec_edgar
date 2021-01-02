@@ -44,7 +44,7 @@ class ReportParser(Parser):
             with open(local_path, "r", encoding="utf8") as f:
                 content = f.read()
         else:
-            response = requests.get(file_url,headers={'accept-encoding':'gzip'})
+            response = requests.get(file_url, headers={'accept-encoding': 'gzip'})
             if response.status_code == 200:
                 content = response.content.decode("utf8")
                 if save:
@@ -119,12 +119,33 @@ if __name__ == '__main__':
     parser = ReportParser()
     # parser.add_parser(GeneralParser())
     # parser.add_parser(IncomeStatementParser())
-    # parser.add_parser(BalanceSheetParser())
-    parser.add_parser(CashFlowParser())
+    parser.add_parser(BalanceSheetParser())
+    # parser.add_parser(CashFlowParser())
+    parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000912057-01-515409.txt")
+    parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000912057-01-528148.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/1300514/0001300514-14-000010.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/1300514/0001300514-14-000015.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/1300514/0001300514-14-000022.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/1300514/0001300514-15-000009.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/1300514/0001300514-15-000013.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/1300514/0001300514-15-000018.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/1300514/0001300514-19-000107.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/1300514/0000950153-07-001052.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/1300514/0000950153-08-000939.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/1300514/0000950153-08-001398.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/1300514/0000950153-08-001918.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/1300514/0000950153-09-000359.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/1300514/0001193125-12-223529.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/1300514/0001193125-12-345360.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/1300514/0001193125-05-108519.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/1300514/0001300514-05-000016.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/1300514/0000950153-06-001299.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/1300514/0001300514-05-000010.txt")
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0001104659-06-084286.txt")
     # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001104659-04-021678.txt")  # strange columns
-    parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001104659-04-013278.txt")  # strange columns
-    parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0001104659-04-013021.txt")  # strange columns
-    parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0001104659-04-022384.txt")  # strange columns
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/51143/0001104659-04-013278.txt")  # strange columns
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0001104659-04-013021.txt")  # strange columns
+    # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0001104659-04-022384.txt")  # strange columns
     # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-94-000002.txt")  # AAPL 1994
     # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-95-000003.txt")  # AAPL 1995
     # parser.parse("https://www.sec.gov/Archives/edgar/data/320193/0000320193-96-000002.txt")  # AAPL 1996

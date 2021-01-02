@@ -4,6 +4,7 @@ import html
 
 import pandas as pd
 import numpy as np
+import bs4 as bs
 from bs4 import BeautifulSoup
 from word2number import w2n
 import dateutil.parser as dparser
@@ -27,6 +28,7 @@ class Parser(object):
         else:
             df, parse_type = self._parse_raw(content), "raw"
         if df is not None:
+            df.dropna(axis=1, how="all", inplace=True)
             self._drop_similar_columns(df)
             df = self._normalize_column_name(df)
         return df, parse_type
@@ -53,6 +55,14 @@ class Parser(object):
         if column_mapping:
             df.rename(columns=column_mapping, inplace=True)
         return df
+
+    def _is_element_before(self, e1, e2):
+        current_e = e1
+        while current_e and current_e.previous:
+            if current_e.previous == e2:
+                return True
+            current_e = current_e.previous
+        return False
 
     def _get_elements_between_tags(self, first_tag, second_tag, elements_tag, stop_after_found_tag=False):
         # TODO find values scale
@@ -87,21 +97,45 @@ class Parser(object):
     def _find_relevant_lines(self, lines):
         raise NotImplementedError()
 
+    def _check_parent_tag(self, item, tags):
+        current_item = item
+        while current_item.parent:
+            if current_item.parent.name in tags:
+                return True
+            current_item = current_item.parent
+        return False
+
+    def _count_contents(self, tag):
+        count = 0
+        for item in tag.children:
+            if item.name is None or item.name in {"br"}:
+                pass
+            else:
+                count += 1
+        return count
+
     def _find_multiple_words(self, tag, words=[], either=[], words_not_to_include=[], with_tag={}):
         text = tag.text.strip()
         if not text or tag.name in {"html", "body"}:
             return False
-        if ((with_tag and tag.name not in with_tag) or len(tag.contents) > 1) and re.search(
+        if ((with_tag and tag.name not in with_tag) or self._count_contents(tag) > 1) and re.search(
                 rf"^{' '.join(words)}(?: OF)? (?:{'|'.join(either)})", text) is None:
             return False
-        matches = [re.search(rf".*{word}S?.*", text, re.MULTILINE) is not None for word in
+        if len(text) > 200:
+            return False
+
+        matches = [re.search(rf".*{word}S?.*", text, re.MULTILINE | re.IGNORECASE) is not None for word in
                    words]
-        either_matches = [re.search(rf".*{word}S?.*", text, re.MULTILINE) is not None for word in
+        either_matches = [re.search(rf".*{word}S?.*", text, re.MULTILINE | re.IGNORECASE) is not None for word in
                           either]
-        negative_matches = [re.search(rf".*{word}.*", text, re.MULTILINE) is not None for word in
+        negative_matches = [re.search(rf".*{word}.*", text, re.MULTILINE | re.IGNORECASE) is not None for word in
                             words_not_to_include]
-        return sum(matches) == len(words) and sum(negative_matches) == 0 and (
+        found_it = sum(matches) == len(words) and sum(negative_matches) == 0 and (
             sum(either_matches) == 1 if either else True)
+        if found_it and tag.find_parent("table") is not None:
+            # we we shouldn't get something that's within a table
+            return False
+        return found_it
 
     def _clean_multipage_table(self, lines):
         clean_lines = []
@@ -145,11 +179,7 @@ class Parser(object):
                                               sorted(set(years), key=lambda x: pd.to_datetime(x), reverse=True)])
 
         df.replace(r"^-+", "", inplace=True, regex=True)
-        df.replace(r"_+", "", inplace=True, regex=True)
-        df.replace(r"+", "", inplace=True, regex=True)
-        df.replace(r"=+", "", inplace=True, regex=True)
-        df.replace(r"\++", "", inplace=True, regex=True)
-        df.replace(r"\*", "", inplace=True, regex=True)
+        df.replace(r"(_||=|\+|\*|—)+", "", inplace=True, regex=True)
         df = df.replace("", np.nan).dropna(axis=0, how="all")
         df.replace(np.nan, "", inplace=True)
         for col in df.columns[1:]:
@@ -191,6 +221,12 @@ class Parser(object):
         years = []
         dates = end_date
         content_beginning = None
+        done_before_sequences = {
+            'Pro forma data'.lower()
+        }
+        done_sequences = {
+            'Cash dividends per common share'.lower()
+        }
         for line in table_rows:
             if not content_beginning:
                 found_dates = re.findall(
@@ -244,15 +280,18 @@ class Parser(object):
                             "Adjustments to reconcile"):
                         splits = [f"{line}"]
                     else:
-                        if re.search(r".+\s+[0-9.\(\)\-_]+\s+[0-9.\(\)\-_$]+", line, re.IGNORECASE):
+                        if re.search(r".+\s+[0-9.\(\)\-_—]+\s+[0-9.\(\)\-_—$]+", line, re.IGNORECASE):
                             splits = line.rsplit(maxsplit=num_columns)
                         elif re.search(r"[a-zA-Z]+", line) is not None:
                             splits = [line]
                         else:
                             continue
                 if "<S>" not in line and splits:
-                    rows.append(splits)
-                    if splits[0].lower() == 'Cash dividends per common share'.lower():
+                    if sum([done_sequence in splits[0].lower() for done_sequence in done_before_sequences]) == 0:
+                        rows.append(splits)
+                    else:
+                        break
+                    if splits[0].lower() in done_sequences:
                         break
         if not periods:
             periods = [3]
@@ -307,7 +346,9 @@ class Parser(object):
             lines = []
             rows = table.find_all("tr")
             for row in rows:
-                line = re.sub(r'\s+', ' ', row.text.replace("\n", " ").replace("$", "")).strip()
+                line = re.sub(r'(?<=[a-zA-Z\)])(?=[0-9])|\s+', ' ',
+                              row.text.replace("\n", " ").replace("$", " ")).strip()
+                line = re.sub(r'(?<=[a-zA-Z\)])\((?=[0-9])', " (", line)
                 line = re.sub(r'\s\)', ')', line)
                 line = re.sub(r'\(\s', '(', line)
                 if line and re.search('visibility\s*:\s*hidden', row.attrs.get("style", ""), re.IGNORECASE) is None:
@@ -428,7 +469,6 @@ class Parser(object):
         return df
 
     def parse_table(self, table_html, period=None, end_date=None):
-        # TODO fix the period
         df = pd.read_html(table_html)
         if isinstance(df, list):
             df = df[0]
@@ -440,6 +480,8 @@ class Parser(object):
         df = self._combine_df_rows(df)
         df = df.drop(index=df[df["name"] == ""].index)
         df.replace(r", ", ",", regex=True, inplace=True)
+        if len(df.columns) == 1:
+            raise Exception("Couldn't find the columns")
         df = df[1:]
         # period = self._find_periods(df)
         for col in df.columns[1:]:

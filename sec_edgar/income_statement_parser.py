@@ -36,18 +36,30 @@ class IncomeStatementParser(Parser):
         return df
 
     def _find_tables_and_info(self, soup):
-        income_title = soup.find(
+        first_item = soup.find(
             lambda tag: self._find_multiple_words(tag, ["CONSOLIDATED", "STATEMENT"],
-                                                  ["INCOME", "EARNINGS", "OPERATIONS"],
+                                                  ["INCOME", "EARNING", "OPERATION"],
                                                   ["COMPREHENSIVE", "CONTINUED"],
-                                                  with_tag={"p", "b", "font", "span", "div"}))
-        balance_sheet_title = soup.find(
+                                                  with_tag={"p", "b", "font", "span", "div", "a"}))
+        if not first_item:
+            raise Exception("Couldn't find the beginning of the income sheet")
+        second_item = soup.find(
             lambda tag: self._find_multiple_words(tag, ["CONSOLIDATED"],
-                                                  either=["FINANCIAL POSITION", "BALANCE SHEET"],
+                                                  either=["FINANCIAL POSITION", "BALANCE SHEET", "BALANCE\nSHEET"],
                                                   words_not_to_include=["CONTINUED"],
-                                                  with_tag={"p", "b", "font", "span", "div"}))
-        tables, period, end_date = self._get_elements_between_tags(income_title, balance_sheet_title, "table")
-        if not tables:
+                                                  with_tag={"p", "b", "font", "span",
+                                                            "div", "a"}))
+        if self._is_element_before(first_item, second_item) or second_item is None:
+            print("the last element is before the first")
+            second_item = soup.find(
+                lambda tag: self._find_multiple_words(tag, ["CONSOLIDATED", "STATEMENT", "CASH", "FLOWS"],
+                                                      words_not_to_include=["CONTINUED"],
+                                                      with_tag={"p", "b", "font", "div", "span",
+                                                                "a"}) or self._find_multiple_words(
+                    tag, ["CONSOLIDATED", "STATEMENT", "EQUITY"],
+                    with_tag={"p", "b", "font", "div", "span", "a"}))
+        tables, period, end_date = self._get_elements_between_tags(first_item, second_item, "table")
+        if not tables or len(tables) > 2:
             raise Exception("Couldn't find the income sheet table(s)")
         return tables, period, end_date
 

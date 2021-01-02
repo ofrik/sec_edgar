@@ -36,25 +36,40 @@ class BalanceSheetParser(Parser):
         return df
 
     def _find_tables_and_info(self, soup):
-        balance_sheet_title = soup.find(
+        first_item = soup.find(
             lambda tag: self._find_multiple_words(tag, ["CONSOLIDATED"],
-                                                  ["FINANCIAL POSITION", "BALANCE SHEET"],
-                                                  with_tag={"p", "b", "font", "div", "span"}))
-        title_limit = None
-        shareholders_equity_title = soup.find(
-            lambda tag: self._find_multiple_words(tag, ["CONSOLIDATED", "STATEMENT", "SHAREHOLDERS’", "EQUITY"],
-                                                  with_tag={"p", "b", "font", "div", "span"}))
-        if shareholders_equity_title is None:
-            cash_flow_sheet_title = soup.find(
+                                                  ["FINANCIAL POSITION", "BALANCE SHEET",
+                                                   "BALANCE\nSHEET"],
+                                                  with_tag={"p", "b", "font", "div", "span", "a"}))
+        if not first_item:
+            raise Exception("Couldn't find the beginning of the balance sheet")
+        second_item = soup.find(
+            lambda tag: self._find_multiple_words(tag, ["CONSOLIDATED", "STATEMENT", "CASH", "FLOWS"],
+                                                  words_not_to_include=["CONTINUED"],
+                                                  with_tag={"p", "b", "font", "div", "span",
+                                                            "a"}) or self._find_multiple_words(tag, ["CONSOLIDATED",
+                                                                                                     "STATEMENT"],
+                                                                                               ["INCOME", "EARNINGS",
+                                                                                                "OPERATIONS"],
+                                                                                               ["COMPREHENSIVE",
+                                                                                                "CONTINUED"],
+                                                                                               with_tag={"p", "b",
+                                                                                                         "font",
+                                                                                                         "span", "div",
+                                                                                                         "a"}) or self._find_multiple_words(
+                tag, ["CONSOLIDATED", "STATEMENT", "SHAREHOLDERS’", "EQUITY"],
+                with_tag={"p", "b", "font", "div", "span", "a"}))
+        if self._is_element_before(first_item, second_item) or second_item is None:
+            print("the last element is before the first")
+            second_item = soup.find(
                 lambda tag: self._find_multiple_words(tag, ["CONSOLIDATED", "STATEMENT", "CASH", "FLOWS"],
                                                       words_not_to_include=["CONTINUED"],
-                                                      with_tag={"p", "b", "font", "div", "span"}))
-            title_limit = cash_flow_sheet_title
-        else:
-            title_limit = shareholders_equity_title
-
-        tables, period, end_date = self._get_elements_between_tags(balance_sheet_title, title_limit, "table")
-        if not tables:
+                                                      with_tag={"p", "b", "font", "div", "span",
+                                                                "a"}) or self._find_multiple_words(
+                    tag, ["CONSOLIDATED", "STATEMENT", "EQUITY"],
+                    with_tag={"p", "b", "font", "div", "span", "a"}))
+        tables, period, end_date = self._get_elements_between_tags(first_item, second_item, "table")
+        if not tables or len(tables) > 2:
             raise Exception("Couldn't find the balance sheet table(s)")
         return tables, period, end_date
 

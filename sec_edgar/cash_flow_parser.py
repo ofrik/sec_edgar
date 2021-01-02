@@ -32,7 +32,7 @@ class CashFlowParser(Parser):
         cash_flow_sheet_title = soup.find(
             lambda tag: self._find_multiple_words(tag, ["CONSOLIDATED", "STATEMENT", "CASH", "FLOWS"],
                                                   words_not_to_include=["CONTINUED"],
-                                                  with_tag={"p", "b", "font", "div", "span"}))
+                                                  with_tag={"p", "b", "font", "div", "span", "a"}))
 
         table, period, end_date = self._get_elements_between_tags(cash_flow_sheet_title, None, "table",
                                                                   stop_after_found_tag=True)
