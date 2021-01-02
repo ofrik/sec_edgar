@@ -11,15 +11,30 @@ class IncomeStatementParser(Parser):
     def _find_relevant_lines(self, clean_lines):
         start_index = -1
         end_index = -1
+        in_page = False
+        in_index = False
+        there_were_pages = False
         for i, line in enumerate(clean_lines):
-            if start_index == -1 and re.search(r"(CONSOLIDATED STATEMENTS? (OF )?(EARNINGS|OPERATIONS|INCOME))", line,
-                                               re.MULTILINE) is not None:
-                start_index = i
-            if start_index != -1 and re.search(r"CONSOLIDATED (STATEMENT )?(OF )?(FINANCIAL POSITION|BALANCE SHEETS)",
-                                               line,
-                                               re.MULTILINE) is not None:
-                end_index = i
-                break
+            if in_index and "<PAGE>".lower() in line.lower():
+                in_index = False
+                continue
+            if "<PAGE>".lower() in line.lower():
+                in_page = True
+                if not there_were_pages:
+                    there_were_pages = True
+                continue
+            if "INDEX".lower() == line.lower() and in_page:
+                in_index = True
+                continue
+            if not in_index and (in_page or not there_were_pages):
+                if start_index == -1 and self._find_income_sheet_title(line) is not None:
+                    start_index = i
+                if start_index != -1 and self._find_balance_sheet_title(line) is not None:
+                    end_index = i
+                    break
+                if start_index != -1 and self._find_cash_flow_title(line) is not None:
+                    end_index = i
+                    break
         return start_index, end_index
 
     def _find_table_beginning(self, line):
@@ -27,7 +42,11 @@ class IncomeStatementParser(Parser):
             # collect period
             found_items = re.findall(r"(\w+) ?\n?months(?: ?\n?ended)?", line, re.IGNORECASE | re.MULTILINE)
             periods = [w2n.word_to_num(period) for period in found_items]
-            return periods
+            unique_periods = []
+            for p in periods:
+                if p not in unique_periods:
+                    unique_periods.append(p)
+            return unique_periods
 
     def _combine_df_rows(self, df):
         df = self._combine_with_next_if_exists(df, "^Income tax (expense)/benefit related to items of$", regex=True)
@@ -49,7 +68,7 @@ class IncomeStatementParser(Parser):
                                                   words_not_to_include=["CONTINUED"],
                                                   with_tag={"p", "b", "font", "span",
                                                             "div", "a"}))
-        if self._is_element_before(first_item, second_item) or second_item is None:
+        if second_item is None or self._is_element_before(first_item, second_item):
             print("the last element is before the first")
             second_item = soup.find(
                 lambda tag: self._find_multiple_words(tag, ["CONSOLIDATED", "STATEMENT", "CASH", "FLOWS"],

@@ -1,11 +1,13 @@
 import traceback
 
 from datetime import datetime
-import pandas as pd
 import requests
 import os
-from tqdm import tqdm
 import json
+from concurrent.futures import ThreadPoolExecutor
+
+import pandas as pd
+from tqdm import tqdm
 
 from sec_edgar import BalanceSheetParser
 from sec_edgar import CashFlowParser
@@ -72,6 +74,16 @@ class SecEdgar(object):
         output = {"_".join(k): v for k, v in output.items()}
         return output
 
+    def get_specific_report(self, symbol, quarter_index, report_type):
+        symbol_files = quarter_index.get(f"{self._ciks_map[symbol]}_{report_type}", None)
+        if not symbol_files:
+            raise Exception(f"Couldn't find files for {symbol}")
+        if len(symbol_files) > 1:
+            print("There are multiple files, check out the differences")
+            raise Exception("There are multiple files, we don't know how to handle that in the meanwhile")
+        report = parser.parse(symbol_files[0], save=True)
+        return report
+
     def get_reports(self, parser, from_year, from_quarter, to_year=datetime.today().year,
                     to_quarter=pd.Timestamp(datetime.today()).quarter - 1, report_type="10-Q"):
         max_year = datetime.today().year
@@ -87,19 +99,31 @@ class SecEdgar(object):
 
         while current_year < to_year or (current_year == to_year and current_quarter <= to_quarter):
             quarter_index = self.get_quarter_index(current_year, current_quarter)
-            for symbol in tqdm(self._symbols, leave=False):
-                try:
-                    symbol_files = quarter_index.get(f"{self._ciks_map[symbol]}_{report_type}", None)
-                    if not symbol_files:
-                        print(f"Couldn't find a report for {symbol} in Q{current_quarter} {current_year}")
-                        continue
-                    if len(symbol_files) > 1:
-                        print("There are multiple files, check out the differences")
-                        raise Exception("There are multiple files, we don't know how to handle that in the meanwhile")
-                    report = parser.parse(symbol_files[0], save=True)
-                except:
-                    print(f"Failed to get {symbol} in Q{current_quarter} {current_year}")
-                    traceback.print_exc()
+            pbar = tqdm(total=len(self._symbols), leave=False, desc=f"Q{current_quarter} {current_year}")
+            with ThreadPoolExecutor(5) as executor:
+                futures = [executor.submit(self.get_specific_report, symbol, quarter_index, report_type) for symbol in
+                           self._symbols]
+                for future in futures:
+                    try:
+                        output = future.result()
+                    except Exception as e:
+                        pass
+                    finally:
+                        pbar.update(1)
+            pbar.close()
+            # for symbol in tqdm(self._symbols, leave=False):
+            #     try:
+            #         symbol_files = quarter_index.get(f"{self._ciks_map[symbol]}_{report_type}", None)
+            #         if not symbol_files:
+            #             print(f"Couldn't find a report for {symbol} in Q{current_quarter} {current_year}")
+            #             continue
+            #         if len(symbol_files) > 1:
+            #             print("There are multiple files, check out the differences")
+            #             raise Exception("There are multiple files, we don't know how to handle that in the meanwhile")
+            #         report = parser.parse(symbol_files[0], save=True)
+            #     except:
+            #         print(f"Failed to get {symbol} in Q{current_quarter} {current_year}")
+            #         traceback.print_exc()
 
             current_quarter += 1
             if current_quarter % 5 == 0:
@@ -108,8 +132,8 @@ class SecEdgar(object):
 
 
 if __name__ == '__main__':
-    edgar_sec = SecEdgar(["AAPL", "IBM", "LVS"])
-    edgar_sec = SecEdgar(["A"]) # CAT
+    # edgar_sec = SecEdgar(["AAPL", "IBM", "LVS", "A"])
+    edgar_sec = SecEdgar(["CAT"])  # CAT # F
     # edgar_sec.get_quarter_index(1994, 1)
     parser = ReportParser()
     # parser.add_parser(GeneralParser())

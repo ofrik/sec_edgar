@@ -17,14 +17,14 @@ class Parser(object):
         if type == "html":
             soup = BeautifulSoup(content, "lxml")
             tables, period, end_date = self._find_tables_and_info(soup)
-            try:
-                if do_html_native:
-                    df, parse_type = self._parse_html_native(tables, period, end_date), "native"
-                else:
-                    df, parse_type = self._parse_html(tables, period, end_date), "pandas"
-            except Exception as e:
-                print("Failed to parse html, try using native html parsing")
+            # try:
+            if do_html_native or True:
                 df, parse_type = self._parse_html_native(tables, period, end_date), "native"
+            else:
+                df, parse_type = self._parse_html(tables, period, end_date), "pandas"
+            # except Exception as e:
+            #     print("Failed to parse html, try using native html parsing")
+            #     df, parse_type = self._parse_html_native(tables, period, end_date), "native"
         else:
             df, parse_type = self._parse_raw(content), "raw"
         if df is not None:
@@ -32,6 +32,24 @@ class Parser(object):
             self._drop_similar_columns(df)
             df = self._normalize_column_name(df)
         return df, parse_type
+
+    def _find_balance_sheet_title(self, line):
+        return re.search(r"CONSOLIDATED (STATEMENT )?(OF )?(FINANCIAL POSITION|BALANCE SHEETS?)", line,
+                         re.MULTILINE | re.IGNORECASE)
+
+    def _find_income_sheet_title(self, line):
+        return re.search(r"(CONSOLIDATED STATEMENTS? (OF )?(EARNINGS?|OPERATIONS?|INCOME))", line,
+                         re.MULTILINE | re.IGNORECASE)
+
+    def _find_cash_flow_title(self, line):
+        return re.search(
+            r"(CONSOLIDATED STATEMENTS? (OF )?)?CASH FLOWS?|CONSOLIDATED STATEMENTS? (OF )?CASH", line,
+            re.MULTILINE | re.IGNORECASE)
+
+    def _find_dates(self, line):
+        return re.findall(
+            r"((?:January|Jan\.|February|Feb\.|March|Mar\.|April|Apr\.|May|June|Jun\.|July|Jul\.|August|Aug\.|September|Sep\.|October|Oct\.|November|Nov\.|December|Dec\.)\s[0-9]{1,2})",
+            line, re.IGNORECASE)
 
     def _normalize_column_name(self, df):
         column_mapping = {}
@@ -42,9 +60,7 @@ class Parser(object):
             found_periods = self._find_table_beginning(col)
             if found_periods:
                 period = found_periods[0]
-            found_dates = re.findall(
-                r"((?:January|February|March|April|May|June|July|August|September|October|November|December)\s[0-9]{1,2})",
-                col, re.IGNORECASE)
+            found_dates = self._find_dates(col)
             if found_dates:
                 date_ = found_dates[0]
             found_years = re.findall(r"\d{4}", col)
@@ -79,9 +95,7 @@ class Parser(object):
                     break
             if hasattr(current_tag, 'text') and not found_tags and current_tag.find("table") is None:
                 if not end_date:
-                    found_dates = re.findall(
-                        r"((?:January|February|March|April|May|June|July|August|September|October|November|December)\s[0-9]{1,2})",
-                        current_tag.text, re.IGNORECASE)
+                    found_dates = self._find_dates(current_tag.text)
                     if found_dates:
                         end_date = [re.sub("\s+", " ", d) for d in found_dates]
                 if not period:
@@ -179,7 +193,7 @@ class Parser(object):
                                               sorted(set(years), key=lambda x: pd.to_datetime(x), reverse=True)])
 
         df.replace(r"^-+", "", inplace=True, regex=True)
-        df.replace(r"(_||=|\+|\*|—)+", "", inplace=True, regex=True)
+        df.replace(r"(\x92|\x97|\x96|_||=|\+|\*|—)+", "", inplace=True, regex=True)
         df = df.replace("", np.nan).dropna(axis=0, how="all")
         df.replace(np.nan, "", inplace=True)
         for col in df.columns[1:]:
@@ -207,6 +221,10 @@ class Parser(object):
             return True
         if "Months" in line:
             return True
+        if "restated" in line.lower():
+            return True
+        if "presentation" in line.lower():
+            return True
         if line.isupper() and ":" not in line:
             return True
         if line == "<PAGE>" or (line.startswith("(") and line.endswith(")")):
@@ -222,16 +240,14 @@ class Parser(object):
         dates = end_date
         content_beginning = None
         done_before_sequences = {
-            'Pro forma data'.lower()
+            'Pro forma'.lower()
         }
         done_sequences = {
             'Cash dividends per common share'.lower()
         }
         for line in table_rows:
             if not content_beginning:
-                found_dates = re.findall(
-                    r"((?:January|February|March|April|May|June|July|August|September|October|November|December)\s[0-9]{1,2})",
-                    line, re.IGNORECASE)
+                found_dates = self._find_dates(line)
                 if found_dates:
                     if dates:
                         dates += found_dates
@@ -257,7 +273,8 @@ class Parser(object):
                     content_beginning = True
                 continue
             if num_columns:
-                line = re.sub(r"(-|\.){3,}", "", line.replace("_", "").replace("=", "").replace(",", "")).strip()
+                line = re.sub(r"(-|\.){3,}", "",
+                              line.replace("_", "").replace("=", "").replace(",", "").replace("*", "")).strip()
                 if self._should_skip_line(line):
                     continue
                 try:
@@ -280,8 +297,13 @@ class Parser(object):
                             "Adjustments to reconcile"):
                         splits = [f"{line}"]
                     else:
-                        if re.search(r".+\s+[0-9.\(\)\-_—]+\s+[0-9.\(\)\-_—$]+", line, re.IGNORECASE):
-                            splits = line.rsplit(maxsplit=num_columns)
+                        splits = line.rsplit(maxsplit=num_columns)
+                        # r'[0-9.\(\)\-_—]+'
+                        if sum([re.search(r'[0-9]?\.?[0-9\(\)\-_—]+', p) is not None for p in splits][
+                               1:]) == num_columns:
+                            pass
+                        # if re.search(rf".+\s+[0-9.\(\)\-_—]+\s+[0-9.\(\)\-_—$]+", line, re.IGNORECASE):
+                        #     splits = line.rsplit(maxsplit=num_columns)
                         elif re.search(r"[a-zA-Z]+", line) is not None:
                             splits = [line]
                         else:
@@ -346,11 +368,15 @@ class Parser(object):
             lines = []
             rows = table.find_all("tr")
             for row in rows:
+                line = re.sub(r'\u200b', ' ', row.text)
+                line = line.replace("(", " (")
                 line = re.sub(r'(?<=[a-zA-Z\)])(?=[0-9])|\s+', ' ',
-                              row.text.replace("\n", " ").replace("$", " ")).strip()
-                line = re.sub(r'(?<=[a-zA-Z\)])\((?=[0-9])', " (", line)
+                              line.replace("\n", " ").replace("$", " ")).strip()
+                line = re.sub(r'(?<=[a-zA-Z0-9\)])\((?=[0-9])', " (", line)
+                line = re.sub(r'(?<=[a-zA-Z\)])—', " —", line)
                 line = re.sub(r'\s\)', ')', line)
                 line = re.sub(r'\(\s', '(', line)
+                line = line.replace("Thre e", "Three")
                 if line and re.search('visibility\s*:\s*hidden', row.attrs.get("style", ""), re.IGNORECASE) is None:
                     lines.append(line)
             df = self._parse_raw(lines, period, end_date, preprocess_table=False)
@@ -489,9 +515,7 @@ class Parser(object):
         if end_date:
             column_mapping = {}
             for col in df.columns[1:]:
-                found_dates = re.findall(
-                    r"((?:January|February|March|April|May|June|July|August|September|October|November|December)\s[0-9]{1,2})",
-                    col, re.IGNORECASE)
+                found_dates = self._find_dates(col)
                 if not found_dates:
                     column_mapping[col] = f"{end_date[0]} {col}"
             if column_mapping:

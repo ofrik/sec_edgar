@@ -10,15 +10,30 @@ class BalanceSheetParser(Parser):
     def _find_relevant_lines(self, clean_lines):
         start_index = -1
         end_index = -1
+        in_page = False
+        in_index = False
+        there_were_pages = False
         for i, line in enumerate(clean_lines):
-            if start_index == -1 and re.search(r"CONSOLIDATED (STATEMENT )?(OF )?(FINANCIAL POSITION|BALANCE SHEETS)",
-                                               line,
-                                               re.MULTILINE) is not None:
-                start_index = i
-            if start_index != -1 and (re.search(r"(CONSOLIDATED STATEMENT (OF )?)?CASH( FLOWS?)?", line,
-                                                re.MULTILINE) is not None):
-                end_index = i
-                break
+            if in_index and "<PAGE>".lower() in line.lower():
+                in_index = False
+                continue
+            if "<PAGE>".lower() in line.lower():
+                in_page = True
+                if not there_were_pages:
+                    there_were_pages = True
+                continue
+            if "INDEX".lower() == line.lower() and in_page:
+                in_index = True
+                continue
+            if not in_index and (in_page or not there_were_pages):
+                if start_index == -1 and self._find_balance_sheet_title(line) is not None:
+                    start_index = i
+                if start_index != -1 and self._find_cash_flow_title(line) is not None:
+                    end_index = i
+                    break
+                if start_index != -1 and self._find_income_sheet_title(line) is not None:
+                    end_index = i
+                    break
         return start_index, end_index
 
     def _find_table_beginning(self, line):
