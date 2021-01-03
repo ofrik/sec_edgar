@@ -48,7 +48,7 @@ class CashFlowParser(Parser):
 
     def _find_tables_and_info(self, soup):
         cash_flow_sheet_title = soup.find(
-            lambda tag: self._find_multiple_words(tag, ["CONSOLIDATED", "STATEMENT", "CASH", "FLOWS"],
+            lambda tag: self._find_multiple_words(tag, ["STATEMENT", "CASH", "FLOW"],
                                                   words_not_to_include=["CONTINUED"],
                                                   with_tag={"p", "b", "font", "div", "span", "a"}))
 

@@ -111,19 +111,6 @@ class SecEdgar(object):
                     finally:
                         pbar.update(1)
             pbar.close()
-            # for symbol in tqdm(self._symbols, leave=False):
-            #     try:
-            #         symbol_files = quarter_index.get(f"{self._ciks_map[symbol]}_{report_type}", None)
-            #         if not symbol_files:
-            #             print(f"Couldn't find a report for {symbol} in Q{current_quarter} {current_year}")
-            #             continue
-            #         if len(symbol_files) > 1:
-            #             print("There are multiple files, check out the differences")
-            #             raise Exception("There are multiple files, we don't know how to handle that in the meanwhile")
-            #         report = parser.parse(symbol_files[0], save=True)
-            #     except:
-            #         print(f"Failed to get {symbol} in Q{current_quarter} {current_year}")
-            #         traceback.print_exc()
 
             current_quarter += 1
             if current_quarter % 5 == 0:
@@ -132,8 +119,8 @@ class SecEdgar(object):
 
 
 if __name__ == '__main__':
-    # edgar_sec = SecEdgar(["AAPL", "IBM", "LVS", "A"])
-    edgar_sec = SecEdgar(["CAT"])  # CAT # F
+    edgar_sec = SecEdgar(["AAPL", "IBM", "LVS", "A"])
+    # edgar_sec = SecEdgar(["CAT"])  # CAT # F
     # edgar_sec.get_quarter_index(1994, 1)
     parser = ReportParser()
     # parser.add_parser(GeneralParser())

@@ -59,7 +59,8 @@ class IncomeStatementParser(Parser):
             lambda tag: self._find_multiple_words(tag, ["CONSOLIDATED", "STATEMENT"],
                                                   ["INCOME", "EARNING", "OPERATION"],
                                                   ["COMPREHENSIVE", "CONTINUED"],
-                                                  with_tag={"p", "b", "font", "span", "div", "a"}))
+                                                  with_tag={"p", "b", "font", "span", "div", "a"},
+                                                  exact_phrases={"Statement of Results of Operations"}))
         if not first_item:
             raise Exception("Couldn't find the beginning of the income sheet")
         second_item = soup.find(
@@ -76,7 +77,7 @@ class IncomeStatementParser(Parser):
                                                       with_tag={"p", "b", "font", "div", "span",
                                                                 "a"}) or self._find_multiple_words(
                     tag, ["CONSOLIDATED", "STATEMENT", "EQUITY"],
-                    with_tag={"p", "b", "font", "div", "span", "a"}))
+                    with_tag={"p", "b", "font", "div", "span", "a"},exact_phrases={"Statement of Changes in Stockholders' Equity"}))
         tables, period, end_date = self._get_elements_between_tags(first_item, second_item, "table")
         if not tables or len(tables) > 2:
             raise Exception("Couldn't find the income sheet table(s)")

@@ -34,16 +34,19 @@ class Parser(object):
         return df, parse_type
 
     def _find_balance_sheet_title(self, line):
-        return re.search(r"CONSOLIDATED (STATEMENT )?(OF )?(FINANCIAL POSITION|BALANCE SHEETS?)", line,
+        return re.search(r"(CONSOLIDATED )?(STATEMENT )?(OF )?(FINANCIAL POSITION|BALANCE SHEETS?)", line,
                          re.MULTILINE | re.IGNORECASE)
 
     def _find_income_sheet_title(self, line):
-        return re.search(r"(CONSOLIDATED STATEMENTS? (OF )?(EARNINGS?|OPERATIONS?|INCOME))", line,
-                         re.MULTILINE | re.IGNORECASE)
+        return re.search(
+            r"((STATEMENT of CONSOLIDATED|CONSOLIDATED STATEMENTS?|STATEMENT)( of)?( Results)? (OF )?(EARNINGS?|OPERATIONS?|INCOME))",
+            line,
+            re.MULTILINE | re.IGNORECASE)
 
     def _find_cash_flow_title(self, line):
         return re.search(
-            r"(CONSOLIDATED STATEMENTS? (OF )?)?CASH FLOWS?|CONSOLIDATED STATEMENTS? (OF )?CASH", line,
+            r"CONSOLIDATED STATEMENTS? (OF )?CASH FLOWS?|CONSOLIDATED STATEMENTS? (OF )?CASH|STATEMENTS? (OF )?CASH FLOWS?|CASH\sFLOWS\s\(Unaudited\)",
+            line,
             re.MULTILINE | re.IGNORECASE)
 
     def _find_dates(self, line):
@@ -128,10 +131,12 @@ class Parser(object):
                 count += 1
         return count
 
-    def _find_multiple_words(self, tag, words=[], either=[], words_not_to_include=[], with_tag={}):
-        text = tag.text.strip()
+    def _find_multiple_words(self, tag, words=[], either=[], words_not_to_include=[], with_tag={}, exact_phrases={}):
+        text = re.sub("\s+", " ", tag.text.strip())
         if not text or tag.name in {"html", "body"}:
             return False
+        if text in exact_phrases:
+            return True
         if ((with_tag and tag.name not in with_tag) or self._count_contents(tag) > 1) and re.search(
                 rf"^{' '.join(words)}(?: OF)? (?:{'|'.join(either)})", text) is None:
             return False
@@ -217,13 +222,15 @@ class Parser(object):
             return True
         if re.search(r"^(\d{4} ?){1,}", line) is not None:
             return True
-        if "(Unaudited)" in line:
+        if "(Unaudited)" in line.lower():
             return True
         if "Months" in line:
             return True
         if "restated" in line.lower():
             return True
         if "presentation" in line.lower():
+            return True
+        if "see accompanying" in line.lower():
             return True
         if line.isupper() and ":" not in line:
             return True
@@ -240,7 +247,8 @@ class Parser(object):
         dates = end_date
         content_beginning = None
         done_before_sequences = {
-            'Pro forma'.lower()
+            'pro forma',
+            'the supplemental'
         }
         done_sequences = {
             'Cash dividends per common share'.lower()
@@ -322,6 +330,8 @@ class Parser(object):
                 years = [f"{d} {year}" for d, year in zip(dates, years)]
             else:
                 years = [f"{dates[0]} {year}" for year in years]
+        while len(rows[-1]) == 1:
+            rows = rows[:-1]
         return rows, num_columns, periods, years
 
     def _combine_rows(self, num_columns, rows):
@@ -379,8 +389,9 @@ class Parser(object):
                 line = line.replace("Thre e", "Three")
                 if line and re.search('visibility\s*:\s*hidden', row.attrs.get("style", ""), re.IGNORECASE) is None:
                     lines.append(line)
-            df = self._parse_raw(lines, period, end_date, preprocess_table=False)
-            dfs.append(df)
+            if len(lines) > 10:
+                df = self._parse_raw(lines, period, end_date, preprocess_table=False)
+                dfs.append(df)
         return pd.concat(dfs)
 
     def _fix_values(self, x):

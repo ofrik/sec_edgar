@@ -123,4 +123,5 @@ if __name__ == '__main__':
     parser.add_parser(IncomeStatementParser())
     parser.add_parser(BalanceSheetParser())
     parser.add_parser(CashFlowParser())
-    parser.parse("https://www.sec.gov/Archives/edgar/data/18230/0000018230-94-000014.txt")
+
+    parser.parse("https://www.sec.gov/Archives/edgar/data/18230/0000950131-99-004925.txt")
