@@ -330,6 +330,8 @@ class Parser(object):
                 years = [f"{d} {year}" for d, year in zip(dates, years)]
             else:
                 years = [f"{dates[0]} {year}" for year in years]
+        if not rows:
+            raise Exception("Failed to find relevant rows")
         while len(rows[-1]) == 1:
             rows = rows[:-1]
         return rows, num_columns, periods, years

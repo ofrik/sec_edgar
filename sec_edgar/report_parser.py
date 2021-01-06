@@ -53,7 +53,7 @@ class ReportParser(Parser):
                     with open(local_path, "w", encoding="utf8") as f:
                         f.write(content)
             else:
-                raise Exception(f"Couldn't get {file_url}")
+                raise ConnectionError(f"Couldn't get {file_url}")
         return content
 
     def _get_report_content(self, content):
